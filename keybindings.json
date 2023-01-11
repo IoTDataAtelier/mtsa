@@ -1,0 +1,4 @@
+{
+    "key": "shift+alt+d",
+    "command": "editor.debug.action.selectionToRepl"
+}

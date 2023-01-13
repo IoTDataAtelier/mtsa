@@ -21,7 +21,7 @@ class AutoEncoderMixin(Model):
             def score_samples(self, X):
                 return -1 * np.mean(np.square(X - self.predict(X))) 
             
-            def fit(self, x=None, y=None, batch_size=None, epochs=1, verbose="auto", callbacks=None, validation_split=0, validation_data=None, shuffle=True, class_weight=None, sample_weight=None, initial_epoch=0, steps_per_epoch=None, validation_steps=None, validation_batch_size=None, validation_freq=1, max_queue_size=10, workers=1, use_multiprocessing=False):
+            def fit(self, x=None, y=None, batch_size=None, epochs=1, verbose=0, callbacks=None, validation_split=0, validation_data=None, shuffle=True, class_weight=None, sample_weight=None, initial_epoch=0, steps_per_epoch=None, validation_steps=None, validation_batch_size=None, validation_freq=1, max_queue_size=10, workers=1, use_multiprocessing=False):
                 return super().fit(x, x, batch_size, epochs, verbose, callbacks, validation_split, validation_data, shuffle, class_weight, sample_weight, initial_epoch, steps_per_epoch, validation_steps, validation_batch_size, validation_freq, max_queue_size, workers, use_multiprocessing)
             
        
@@ -45,7 +45,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
                  batch_size=512,
                  shuffle=True,
                  validation_split=0.1,
-                 verbose=1
+                 verbose=0
                  ) -> None:
         self.sampling_rate = sampling_rate
         self.random_state = random_state

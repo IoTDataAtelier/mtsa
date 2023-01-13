@@ -1,3 +1,14 @@
+'''
+
+'''
+#Disable Logging
+import os
+import logging
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+import tensorflow as tf
+tf.get_logger().setLevel(logging.ERROR)
+tf.keras.utils.disable_interactive_logging()
+
 import argparse
 import os
 import numpy as np
@@ -18,6 +29,7 @@ from mtsa import (
 import seaborn as sns
 from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import LeaveOneOut
+
 
 class PaperScript2023:
 
@@ -97,6 +109,7 @@ class PaperScript2023:
         def calculate_roc(params):
             path, model = params
             model_name, model = model
+            print(f"results_01_individual calculate_roc {path} {model_name}")
             X_train, X_test, y_train, y_test = files_train_test_split(path)
             model.fit(X_train, y_train)
             roc = calculate_aucroc(model,X_test, y_test)
@@ -116,6 +129,7 @@ class PaperScript2023:
         def local_get_tsne_results(params):
             path, model = params
             model_name, model = model
+            print(f"results_02_tse local_get_tsne_results {path} {model_name}")
             X_train, X_test, y_train, y_test = files_train_test_split(path)
             x, y, hue = get_tsne_results(
                 model=model,
@@ -156,6 +170,7 @@ class PaperScript2023:
                 paths, model_name, model, split = params
                 train = paths[split[0]]
                 test = paths[split[1]]
+                print(f"results_03_combined calculate_roc {str(test)} {model_name}")
                 train_X_train, train_X_test, train_y_train, train_y_test = files_train_test_split_combined(train)
                 test_X_train, test_X_test, test_y_train, test_y_test = files_train_test_split_combined(test)
                 model.fit(train_X_train, train_y_train)
@@ -163,8 +178,10 @@ class PaperScript2023:
                 return str(test[0]), model_name, roc
             
             def calculate_roc_combined(params):
+                
                 path, model_params = params
                 model_name, model = model_params
+                print(f"results_03_combined calculate_roc_combined {path} {model_name}")
                 paths = np.array(glob.glob(os.path.join(all_paths[0], f'*{os.sep}' )))
                 loo = LeaveOneOut()
                 splits = loo.split(paths) 

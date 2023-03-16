@@ -20,7 +20,7 @@ def get_tsne_results(model, X, y, **kwargs):
     perplexity = _get_par('perplexity', 4, **kwargs)
     n_iter = _get_par('n_iter', 300, **kwargs)
     random_state = _get_par('random_state', None, **kwargs)
-    tsne = TSNE(n_components=n_components, verbose=1, perplexity=perplexity, n_iter=n_iter, random_state=random_state)
+    tsne = TSNE(n_components=n_components, verbose=0, perplexity=perplexity, n_iter=n_iter, random_state=random_state)
     
     # Xt = model['features'].fit_transform(
     #     model['array2mfcc'].fit_transform(

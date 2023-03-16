@@ -1,7 +1,3 @@
-'''
-
-'''
-# Disable Logging
 from mtsa import (
     MFCCMix,
     Hitachi,
@@ -16,20 +12,15 @@ from sklearn.mixture import GaussianMixture
 import seaborn as sns
 import matplotlib.pyplot as plt
 import glob
-from functools import reduce, partial
-import pandas as pd
+from functools import reduce
 import itertools as ite
 import numpy as np
 import argparse
-from common import elapsed_time, multiple_runs
-import tensorflow as tf
 import os
-import logging
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-tf.get_logger().setLevel(logging.ERROR)
-tf.keras.utils.disable_interactive_logging()
-import re
 import json
+from common import elapsed_time, multiple_runs
+
+from scripts.experiments import *
 
 def convert(match_obj):
             if match_obj.group(0) == '_':
@@ -43,7 +34,7 @@ class PaperScript2023:
         self.__dict__.update(kwargs)
 
     def results(self):
-        # self.results_individual()
+        self.results_individual()
         self.results_combined()
 
     def get_features(self):
@@ -59,13 +50,13 @@ class PaperScript2023:
                 features=list(features),
                 final_model=GaussianMixture(n_components=self.n_components)
             )
-            return ("MFCCMix " + "+".join([f[0] for f in features]), mfccmix)
+            return ModelParam("MFCCMix " + "+".join([f[0] for f in features]), mfccmix)
         features = self.get_features()
         mfcc_models = map(build_mfccmix_by_features, features)
         return mfcc_models
 
     def get_models_baseline(self):
-        hitachi = [("Baseline", Hitachi())]
+        hitachi = [ModelParam("Baseline", Hitachi())]
         return hitachi
 
     def get_models(self):
@@ -78,8 +69,8 @@ class PaperScript2023:
     def get_paths(self, level):
         paths = glob.glob(os.path.join(self.path, f'*{os.sep}' * level))
         return paths
-
-    def write_dict(self, my_dict, **kwargs):
+                
+    def write_json(self, result : ParamResult, **kwargs):
         path_output = os.path.join(self.output, 'rocs')
         if not os.path.exists(path_output):
             os.makedirs(path_output)
@@ -87,58 +78,37 @@ class PaperScript2023:
         if 'filename' in kwargs:
             filename = kwargs['filename']
         filepath = os.path.join(path_output, f'{filename}')
-        with open(f'{filepath}.tex', 'w') as tf:
-            json.dump(my_dict, tf)
-            
-    def write_df(self, df_final, **kwargs):
-        path_output = os.path.join(self.output, 'rocs')
-        if not os.path.exists(path_output):
-            os.makedirs(path_output)
-        filename = 'filename'
-        if 'filename' in kwargs:
-            filename = kwargs['filename']
-        filepath = os.path.join(path_output, f'{filename}')
-        # with open(f'{filepath}.tex', 'w') as tf:
-        #     # tf.write(df_final.to_latex())
-        #     tf.write(df_final.style.to_latex())
-        df_final.to_hdf(f'{filepath}.h5', 'df')
+        import time
+        ts = time.time_ns()
+        filepath = f'{filepath}_{ts}'
+        with open(filepath, "a") as jf:
+            import functools as ft
+            #TODO this is ugly but leting keras to be serialized causes circular reference at json.dumps 
+            should_dump = lambda o: any(map(ft.partial(isinstance, o), [t for t in [int, float, str, ParamResult, Result, Params, ModelParam]]))
+            def default(o):
+                if should_dump(o):
+                    if hasattr(o, "__dict__"):
+                        return o.__dict__
+                    else:
+                        return str(o)
+                else:
+                    return ""
+            json_data = json.dumps(result, indent=4, default=default)
+            print(json_data, file=jf)
 
-    def convert_to_dataframe(self, rocs, level):
-        rocs_norms = list(map(self.extract_params, [(r, level) for r in rocs]))
-        # features = list(self.get_paths(level))]
-        df = pd.DataFrame(rocs_norms)
-        col_params = [f'P{p}' for p in range(level+1)]
-        col_features = ['features', 'roc']
-        df_params = pd.DataFrame(
-            df[0].tolist(), index=df.index, columns=col_params)
-        df_rocs = pd.DataFrame(df[[1, 2]])
-        df_rocs.columns = col_features
-        df_final = pd.concat([df_params, df_rocs], axis=1)
-        df_final = pd.pivot(df_final, index=list(
-            df_params.columns), columns='features', values='roc')
-        df_final = df_final[sorted(df_final.columns, key=len)]
-        df_final = df_final.loc[df_final.index].apply(lambda x: round(x, 2))
-        return df_final
-
-    def extract_params(self, params):
-        roc, level = params
-        params = roc[0].split(os.sep)[:-1][-(level+1):]
-        return tuple(params), roc[1], roc[2]
-
-    def fit_individual_model(self, params):
-        path, model_params = params
-        _, model = model_params
+    def fit_individual_model(self, params: Params):
+        path = params.path
+        model = params.model.obj
+        model_name = params.model.name
         X_train, X_test, y_train, y_test = files_train_test_split(path)
         result_fit = elapsed_time(model.fit, X_train, y_train)
+        param_result_fit = ParamResult(params, result_fit)
+        self.write_json(param_result_fit, filename='results_individual_fit')
         result_roc = elapsed_time(calculate_aucroc, model, X_test, y_test)
+        param_result_roc = ParamResult(params,result_roc)
+        self.write_json(param_result_roc, filename='results_individual_roc')
         x, y, hue = self.local_get_tsne_results(model, X_test, y_test)
-        # self.plot_tsne(model_name, path, x, y, hue)
-        result = {
-            'results_fit': result_fit,
-            'results_roc': result_roc,
-            'results_tsne': (x, y, hue)
-        }
-        return result
+        self.plot_tsne(model_name, path, x, y, hue)
 
     def local_get_tsne_results(self, model, X_test, y_test):
         x, y, hue = get_tsne_results(
@@ -159,110 +129,59 @@ class PaperScript2023:
             s=100
             # alpha=0.3
         )
-        path_output = os.path.join(self.output, 'results_02_tse')
+        path_output = os.path.join(self.output, 'results_tse')
         if not os.path.exists(path_output):
             os.makedirs(path_output)
         filename = '_'.join(path.split(os.path.sep)[
                             :-1][-(self.level+1):]) + "_" + model_name
         plt.savefig(os.path.join(path_output, f'{filename}.pdf'))
 
-    def plot_tsne(self, params):
-            filename, x, y, hue = params
-            plt.figure(figsize=(16, 10))
-            sns.scatterplot(
-                x=x, y=y,
-                hue=hue,
-                palette=sns.color_palette("hls", 2),
-                legend="full",
-                s=100
-                # alpha=0.3
-            )
-            path_output = os.path.join(self.output, 'results_02_tse')
-            if not os.path.exists(path_output):
-                os.makedirs(path_output)
-            plt.savefig(os.path.join(path_output, f'{filename}.pdf'))
-
-    
-        
+   
 
     def results_individual(self):
-        print("START: results_01_individual")
-        
-        all_models = self.get_models()
-        all_paths = self.get_paths(self.level)
-        all_params = list(ite.product(all_paths, all_models))
+        print("START: results_individual")
+        all_params = self.get_params(self.level)
         runs = self.runs
         results = [multiple_runs(runs, self.fit_individual_model, param) for param in all_params]        
-        
-        
-        df = pd.DataFrame.from_dict(
-            {
-                (re.sub(r"_|/", convert , param[0][0]).strip(), 
-                 param[0][1][0],
-                 run['run_id']
-                 ): 
-                    {
-                        "fit time": run['run_details']['fun_return']['results_fit']['time_elapsed'],
-                        "roc time": run['run_details']['fun_return']['results_roc']['time_elapsed'],
-                        "roc value": run['run_details']['fun_return']['results_roc']['fun_return']
-                    }
-                for param in list(zip(all_params, results))
-                for run in param[1]
-             
-            },
-            orient='index'
-        )
+        print("FINISH: results_individual")
 
-        df.index = df.index.set_names(['path', 'model', 'run id'])
-
-        def get_filename(param, run):
-            path = param[0]
-            model_name = param[1][0]
-            run_id = run['run_id']
-            filename = f"{'_'.join(path.split(os.path.sep)[:-1][-(self.level+1):])}_{model_name}_{run_id}"
-            return filename
-
-        
-        list(
-            map(
-                self.plot_tsne, 
-                [
-                    (get_filename(param[0], run),
-                    *run['run_details']['fun_return']['results_tsne']) 
-                    
-                    for param in list(zip(all_params, results)) 
-                    for run in param[1]
-                ]
-                )
-            )
-        
-        self.write_df(df, filename='results_01_individual')
-        
-        print("FINISH: results_01_individual")
+    def get_params(self, level):
+        all_models = self.get_models()
+        all_paths = self.get_paths(level)
+        all_params = list(ite.product(all_paths, all_models))
+        all_params = [Params(*p) for p in all_params]
+        return all_params
 
 
     def results_combined(self):
-        print("START: results_03_combined")
+        print("START: results_combined")
 
-        def calculate_roc(params):
-            paths, model_name, model, split = params
-            train = paths[split[0]]
-            test = paths[split[1]]
+        def calculate_roc(params_tuple):
+            paths, model_name, model, split = params_tuple
+            path_train = paths[split[0]]
+            path_test = paths[split[1]]
             print(
-                f"results_03_combined calculate_roc {str(test)} {model_name}")
+                f"results_combined calculate_roc {str(path_test)} {model_name}")
             train_X_train, train_X_test, train_y_train, train_y_test = files_train_test_split_combined(
-                train)
+                path_train)
             test_X_train, test_X_test, test_y_train, test_y_test = files_train_test_split_combined(
-                test)
-            model.fit(train_X_train, train_y_train)
-            roc = calculate_aucroc(model, test_X_test, test_y_test)
-            return str(test[0]), model_name, roc
+                path_test)
+            params = Params(path_test[0], ModelParam(model_name, model))
+            result_fit = elapsed_time(model.fit, train_X_train, train_y_train)
+            param_result_fit = ParamResult(params, result_fit)
+            self.write_json(param_result_fit, filename='results_combined_fit')
+            result_roc = elapsed_time(calculate_aucroc, model, test_X_test, test_y_test)
+            param_result_roc = ParamResult(params,result_roc)
+            self.write_json(param_result_roc, filename='results_combined_roc')
+            x, y, hue = self.local_get_tsne_results(model, test_X_test, test_y_test)
+            self.plot_tsne(model_name, params.path, x, y, hue)
 
-        def calculate_roc_combined(params):
-            path, model_params = params
-            model_name, model = model_params
+        def calculate_roc_combined(params: Params):
+            path = params.path
+            model = params.model.obj
+            model_name = params.model.name
             print(
-                f"results_03_combined calculate_roc_combined {path} {model_name}")
+                f"results_combined calculate_roc_combined {path} {model_name}")
             paths = np.array(glob.glob(os.path.join(path, f'*{os.sep}')))
             loo = LeaveOneOut()
             splits = loo.split(paths)
@@ -270,10 +189,8 @@ class PaperScript2023:
                        (paths, model_name, model, split) for split in splits])
             return list(rocs)
 
-        all_paths = self.get_paths(self.level - 1)
-        all_models = self.get_models()
-        all_params = list(ite.product(all_paths, all_models))
-        
+        all_params = self.get_params(self.level -1 )
+
         results = [
             multiple_runs(self.runs, 
             calculate_roc_combined, 
@@ -281,28 +198,7 @@ class PaperScript2023:
             for param in all_params
             ]   
         
-
-        df = pd.DataFrame.from_dict(
-            {
-                (re.sub(r"_|/", convert , test[0]).strip(), 
-                 test[1],
-                 machine['run_id']
-                 ): 
-                    {
-                        "roc value": test[2]
-                    }
-                for param in list(zip(all_params, results))
-                for machine in param[1]
-                for test in machine['run_details']['fun_return']
-             
-            },
-            orient='index'
-        )
-
-        df.index = df.index.set_names(['path', 'model', 'run id'])
-
-        self.write_df(df, filename='results_03_combined')
-        print("FINISH: results_03_combined")
+        print("FINISH: results_combined")
 
 
 def main(parse_args):

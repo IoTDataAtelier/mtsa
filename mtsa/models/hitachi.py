@@ -3,27 +3,18 @@ from keras.models import Model
 from keras.layers import Input, Dense
 from sklearn.base import BaseEstimator, OutlierMixin
 import numpy as np
-from mtsa.utils import (
-    AbnormalSplit,
-    Demux2Array,
-    Wav2Array,
-    files_train_test_split
-)
-from mtsa.features.mel import (
-    Array2MelSpec
-) 
-from sklearn.pipeline import (
-    Pipeline, 
-)
+from mtsa.utils import Demux2Array, Wav2Array
+from mtsa.features.mel import Array2MelSpec
+from sklearn.pipeline import Pipeline
 from functools import reduce
 
 class AutoEncoderMixin(Model):
-            def score_samples(self, X):
-                return -1 * np.mean(np.square(X - self.predict(X))) 
-            
-            def fit(self, x=None, y=None, batch_size=None, epochs=1, verbose=0, callbacks=None, validation_split=0, validation_data=None, shuffle=True, class_weight=None, sample_weight=None, initial_epoch=0, steps_per_epoch=None, validation_steps=None, validation_batch_size=None, validation_freq=1, max_queue_size=10, workers=1, use_multiprocessing=False):
-                return super().fit(x, x, batch_size, epochs, verbose, callbacks, validation_split, validation_data, shuffle, class_weight, sample_weight, initial_epoch, steps_per_epoch, validation_steps, validation_batch_size, validation_freq, max_queue_size, workers, use_multiprocessing)
-            
+    def score_samples(self, X):
+        return -1 * np.mean(np.square(X - self.predict(X))) 
+    
+    def fit(self, x=None, y=None, batch_size=None, epochs=1, verbose=0, callbacks=None, validation_split=0, validation_data=None, shuffle=True, class_weight=None, sample_weight=None, initial_epoch=0, steps_per_epoch=None, validation_steps=None, validation_batch_size=None, validation_freq=1, max_queue_size=10, workers=1, use_multiprocessing=False):
+        return super().fit(x, x, batch_size, epochs, verbose, callbacks, validation_split, validation_data, shuffle, class_weight, sample_weight, initial_epoch, steps_per_epoch, validation_steps, validation_batch_size, validation_freq, max_queue_size, workers, use_multiprocessing)
+    
        
 class Hitachi(BaseEstimator, OutlierMixin):
     """
@@ -125,7 +116,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
         h = Dense(64, activation="relu")(h)
         h = Dense(inputDim, activation=None)(h)
         final_model = AutoEncoderMixin(inputs=inputLayer, outputs=h)
-        final_model.compile(optimizer='adam', loss='mean_squared_error')
+        final_model.compile(optimizer='adam', loss='mean_squared_error', jit_compile=True)
         return final_model
     
     def _build_model(self):
@@ -173,7 +164,7 @@ class HitachiDCASE2020(Hitachi):
         h = Dense(128, activation="relu")(h)
         h = Dense(128, activation="relu")(h)
         h = Dense(128, activation="relu")(h)
-        h = Dense(inputDim, activation=None)(h)
+        h = Dense(inputDim, activation="relu")(h)
         final_model = AutoEncoderMixin(inputs=inputLayer, outputs=h)
         final_model.compile(optimizer='adam', loss='mean_squared_error')
         return final_model

@@ -9,11 +9,7 @@ def read_data(path):
     return data
 
 
-def insert_run_id(group):
-    # print(group)
-    num_runs = len(group)
-    group['run_id'] = range(len(num_runs))
-    return group
+
 
 def read_df_from_json(path):
     data_fit = read_data(path = f"{path}_fit")
@@ -42,7 +38,14 @@ def read_df_from_json(path):
 
     df_t = df.reset_index()
 
-    df_t.groupby(['path', 'model']).apply(lambda g: insert_run_id(g))
+    def insert_run_id(g):
+        print(type(g))
+        # num_runs = len(g)
+        # g['run_id'] = range(len(num_runs))
+        return g
+    groups = df_t.groupby(['path', 'model'])
+    for g in groups:
+        print(type(g[1]))
 
 
     return df

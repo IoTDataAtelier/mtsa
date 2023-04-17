@@ -12,8 +12,9 @@ class AutoEncoderMixin(Model):
     def score_samples(self, X):
         return -1 * np.mean(np.square(X - self.predict(X))) 
     
-    def fit(self, x=None, y=None, batch_size=None, epochs=1, verbose=0, callbacks=None, validation_split=0, validation_data=None, shuffle=True, class_weight=None, sample_weight=None, initial_epoch=0, steps_per_epoch=None, validation_steps=None, validation_batch_size=None, validation_freq=1, max_queue_size=10, workers=1, use_multiprocessing=False):
-        return super().fit(x, x, batch_size, epochs, verbose, callbacks, validation_split, validation_data, shuffle, class_weight, sample_weight, initial_epoch, steps_per_epoch, validation_steps, validation_batch_size, validation_freq, max_queue_size, workers, use_multiprocessing)
+    def fit(self, x=None, y=None, batch_size=None, epochs=50, verbose=0, callbacks=None, validation_split=0, validation_data=None, shuffle=True, class_weight=None, sample_weight=None, initial_epoch=0, steps_per_epoch=None, validation_steps=None, validation_batch_size=None, validation_freq=1, max_queue_size=10, workers=1, use_multiprocessing=True):
+        #TODO final_model__epochs
+        return super().fit(x=x, y=x, batch_size=batch_size, epochs=epochs, verbose=verbose, callbacks=callbacks, validation_split=validation_split, validation_data=validation_data, shuffle=shuffle, class_weight=class_weight, sample_weight=sample_weight, initial_epoch=initial_epoch, steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_batch_size=validation_batch_size, validation_freq=validation_freq, max_queue_size=max_queue_size, workers=workers, use_multiprocessing=use_multiprocessing)
     
        
 class Hitachi(BaseEstimator, OutlierMixin):
@@ -23,6 +24,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
     Purohit, Harsh, et al. "MIMII Dataset: Sound dataset for malfunctioning industrial machine investigation and inspection." arXiv preprint arXiv:1909.09347 (2019).
     
     """
+
     def __init__(self, 
                  sampling_rate=None,
                  random_state = None,
@@ -53,13 +55,19 @@ class Hitachi(BaseEstimator, OutlierMixin):
         self.verbose=verbose
         self.model = self._build_model()
     
+
+    @property
+    def name(self):
+        return "Hitachi"
+
     def fit(self, X, y=None):
         return self.model.fit(X, 
                               y,
                               final_model__batch_size=self.batch_size,
                               final_model__shuffle= self.shuffle,
                               final_model__validation_split=self.validation_split,
-                              final_model__verbose=self.verbose,
+                              final_model__epochs = self.epochs,
+                              final_model__verbose = self.verbose
                               )
 
     def transform(self, X, y=None):
@@ -94,7 +102,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
         return Xf
 
     def predict(self, X):
-        return self.model.predict(X)
+        return self.model.predict(X, verbose=0)
 
     def score_samples(self, X):
         return np.array(
@@ -168,3 +176,8 @@ class HitachiDCASE2020(Hitachi):
         final_model = AutoEncoderMixin(inputs=inputLayer, outputs=h)
         final_model.compile(optimizer='adam', loss='mean_squared_error')
         return final_model
+    
+
+def get_models_hitachi():
+    hitachi = [("Baseline", Hitachi())]
+    return hitachi

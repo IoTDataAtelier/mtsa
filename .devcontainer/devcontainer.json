@@ -9,14 +9,7 @@
 		"dockerfile": "../Dockerfile"
 	},
 
-	"extensions": [
-		"ms-python.python", 
-		"ms-python.vscode-pylance",
-		"ms-toolsai.jupyter", 
-		"hbenl.vscode-test-explorer", 
-		"littlefoxteam.vscode-python-test-adapter", 
-		"wayou.vscode-todo-highlight"
-	]
+
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
 
@@ -27,7 +20,18 @@
 	// "postCreateCommand": "cat /etc/os-release",
 
 	// Configure tool-specific properties.
-	// "customizations": {},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python", 
+				"ms-python.vscode-pylance",
+				"ms-toolsai.jupyter", 
+				"hbenl.vscode-test-explorer", 
+				"littlefoxteam.vscode-python-test-adapter", 
+				"wayou.vscode-todo-highlight"
+			]
+		}
+	}
 
 	// Uncomment to connect as an existing user other than the container default. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "devcontainer"

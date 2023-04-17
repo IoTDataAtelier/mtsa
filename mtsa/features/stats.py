@@ -2,7 +2,8 @@
 
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
-
+from functools import reduce
+import itertools as ite
 
 class MagnitudeMeanFeatureMfcc(BaseEstimator, TransformerMixin):
     
@@ -45,3 +46,18 @@ class CorrelationFeatureMfcc(BaseEstimator, TransformerMixin):
         Xt = map(get_triu, Xt)
         Xt= np.array(list(Xt)) 
         return Xt
+    
+
+FEATURES = [
+    ("M", MagnitudeMeanFeatureMfcc()), 
+    ("S", MagnitudeStdFeatureMfcc()), 
+    ("C", CorrelationFeatureMfcc())
+]
+
+def get_features(self):
+    number_features = np.arange(1, len(FEATURES)+1)
+    def combinations(r): return ite.combinations(FEATURES, r)
+    all_combinations = map(combinations, number_features)
+    features = reduce(lambda x, y: ite.chain(x, y), all_combinations)
+    return features
+

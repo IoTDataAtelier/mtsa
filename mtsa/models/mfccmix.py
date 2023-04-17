@@ -7,7 +7,9 @@ from sklearn.pipeline import (
 from mtsa.features.stats import (
     MagnitudeMeanFeatureMfcc, 
     MagnitudeStdFeatureMfcc, 
-    CorrelationFeatureMfcc
+    CorrelationFeatureMfcc,
+    FEATURES,
+    get_features
     )
 
 from mtsa.features.mel import (
@@ -20,11 +22,7 @@ from mtsa.utils import (
 from sklearn.mixture import GaussianMixture
 from functools import reduce
 
-FEATURES = [
-      ("M", MagnitudeMeanFeatureMfcc()), 
-      ("S", MagnitudeStdFeatureMfcc()), 
-      ("C", CorrelationFeatureMfcc())
-]
+
 
 FINAL_MODEL = GaussianMixture()
 
@@ -42,6 +40,10 @@ class MFCCMix(BaseEstimator, OutlierMixin):
         self.random_state = random_state
         self.features = features
         self.model = self._build_model()
+
+    @property
+    def name(self):
+        return "MFCCMix " + "+".join([f[0] for f in self.features])
         
     def fit(self, X, y=None):
         return self.model.fit(X, y)

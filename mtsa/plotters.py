@@ -26,7 +26,7 @@ def get_tsne_results(model, X, y, **kwargs):
     #     model['array2mfcc'].fit_transform(
     #     model['wav2array'].fit_transform(X)))
     
-    tsne_results = tsne.fit_transform(X)
+    tsne_results = tsne.fit_transform(model.transform(X))
     p1 = tsne_results[:,0]
     p2 = tsne_results[:,1]
     p3 = y

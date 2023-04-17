@@ -18,24 +18,16 @@ import numpy as np
 import argparse
 import os
 import json
-from common import elapsed_time, multiple_runs
-
+from scripts.common import elapsed_time, multiple_runs
+import time
+import functools as ft
 from scripts.experiments import *
 
-def convert(match_obj):
-            if match_obj.group(0) == '_':
-                return ""
-            if match_obj.group(0) == '/':
-                return " "
 
 class PaperScript2023:
 
     def __init__(self, *args, **kwargs):
         self.__dict__.update(kwargs)
-
-    def results(self):
-        self.results_individual()
-        self.results_combined()
 
     def get_features(self):
         number_features = np.arange(1, len(FEATURES)+1)
@@ -66,9 +58,18 @@ class PaperScript2023:
             x, y), (model_baseline, models_mfccmix))
         return list(all_models)
 
-    def get_paths(self, level):
+    def get_paths(self, level=None):
         paths = glob.glob(os.path.join(self.path, f'*{os.sep}' * level))
         return paths
+    
+    def get_params(self, level=None):
+        if not level:
+            level = self.level
+        all_models = self.get_models()
+        all_paths = self.get_paths(level)
+        all_params = list(ite.product(all_paths, all_models))
+        all_params = [Params(*p) for p in all_params]
+        return all_params
                 
     def write_json(self, result : ParamResult, **kwargs):
         path_output = os.path.join(self.output, 'rocs')
@@ -78,11 +79,10 @@ class PaperScript2023:
         if 'filename' in kwargs:
             filename = kwargs['filename']
         filepath = os.path.join(path_output, f'{filename}')
-        import time
+        
         ts = time.time_ns()
         filepath = f'{filepath}_{ts}'
         with open(filepath, "a") as jf:
-            import functools as ft
             #TODO this is ugly but leting keras to be serialized causes circular reference at json.dumps 
             should_dump = lambda o: any(map(ft.partial(isinstance, o), [t for t in [int, float, str, ParamResult, Result, Params, ModelParam]]))
             def default(o):
@@ -97,6 +97,7 @@ class PaperScript2023:
             print(json_data, file=jf)
 
     def fit_individual_model(self, params: Params):
+        # print(params)
         path = params.path
         model = params.model.obj
         model_name = params.model.name
@@ -132,8 +133,9 @@ class PaperScript2023:
         path_output = os.path.join(self.output, 'results_tse')
         if not os.path.exists(path_output):
             os.makedirs(path_output)
-        filename = '_'.join(path.split(os.path.sep)[
-                            :-1][-(self.level+1):]) + "_" + model_name
+        filename = '_'.join(path.split(os.path.sep)[:-1][-(self.level+1):]) + "_" + model_name
+        ts = time.time_ns()
+        filename = f'{filename}_{ts}'
         plt.savefig(os.path.join(path_output, f'{filename}.pdf'))
 
    
@@ -145,78 +147,79 @@ class PaperScript2023:
         results = [multiple_runs(runs, self.fit_individual_model, param) for param in all_params]        
         print("FINISH: results_individual")
 
-    def get_params(self, level):
-        all_models = self.get_models()
-        all_paths = self.get_paths(level)
-        all_params = list(ite.product(all_paths, all_models))
-        all_params = [Params(*p) for p in all_params]
-        return all_params
 
 
-    def results_combined(self):
-        print("START: results_combined")
+    def calculate_roc(self, params_tuple):
+        paths, model_name, model, split = params_tuple
+        path_train = paths[split[0]]
+        path_test = paths[split[1]]
+        print(
+            f"results_combined calculate_roc {str(path_test)} {model_name}")
+        train_X_train, train_X_test, train_y_train, train_y_test = files_train_test_split_combined(
+            path_train)
+        test_X_train, test_X_test, test_y_train, test_y_test = files_train_test_split_combined(
+            path_test)
+        params = Params(path_test[0], ModelParam(model_name, model))
+        result_fit = elapsed_time(model.fit, train_X_train, train_y_train)
+        param_result_fit = ParamResult(params, result_fit)
+        self.write_json(param_result_fit, filename='results_combined_fit')
+        result_roc = elapsed_time(calculate_aucroc, model, test_X_test, test_y_test)
+        param_result_roc = ParamResult(params,result_roc)
+        self.write_json(param_result_roc, filename='results_combined_roc')
+        x, y, hue = self.local_get_tsne_results(model, test_X_test, test_y_test)
+        self.plot_tsne(model_name, params.path, x, y, hue)
 
-        def calculate_roc(params_tuple):
-            paths, model_name, model, split = params_tuple
-            path_train = paths[split[0]]
-            path_test = paths[split[1]]
-            print(
-                f"results_combined calculate_roc {str(path_test)} {model_name}")
-            train_X_train, train_X_test, train_y_train, train_y_test = files_train_test_split_combined(
-                path_train)
-            test_X_train, test_X_test, test_y_train, test_y_test = files_train_test_split_combined(
-                path_test)
-            params = Params(path_test[0], ModelParam(model_name, model))
-            result_fit = elapsed_time(model.fit, train_X_train, train_y_train)
-            param_result_fit = ParamResult(params, result_fit)
-            self.write_json(param_result_fit, filename='results_combined_fit')
-            result_roc = elapsed_time(calculate_aucroc, model, test_X_test, test_y_test)
-            param_result_roc = ParamResult(params,result_roc)
-            self.write_json(param_result_roc, filename='results_combined_roc')
-            x, y, hue = self.local_get_tsne_results(model, test_X_test, test_y_test)
-            self.plot_tsne(model_name, params.path, x, y, hue)
+    def calculate_roc_combined(self, params: Params):
+        path = params.path
+        model = params.model.obj
+        model_name = params.model.name
+        # print(
+        #     f"results_combined calculate_roc_combined {path} {model_name}")
+        paths = np.array(glob.glob(os.path.join(path, f'*{os.sep}')))
+        loo = LeaveOneOut()
+        splits = loo.split(paths)
+        rocs = map(self.calculate_roc, [
+                (paths, model_name, model, split) for split in splits])
+        return list(rocs)
 
-        def calculate_roc_combined(params: Params):
-            path = params.path
-            model = params.model.obj
-            model_name = params.model.name
-            print(
-                f"results_combined calculate_roc_combined {path} {model_name}")
-            paths = np.array(glob.glob(os.path.join(path, f'*{os.sep}')))
-            loo = LeaveOneOut()
-            splits = loo.split(paths)
-            rocs = map(calculate_roc, [
-                       (paths, model_name, model, split) for split in splits])
-            return list(rocs)
-
-        all_params = self.get_params(self.level -1 )
-
-        results = [
-            multiple_runs(self.runs, 
-            calculate_roc_combined, 
-            param) 
-            for param in all_params
-            ]   
+    # def results_combined(self):
+    #     print("START: results_combined")
         
-        print("FINISH: results_combined")
+    #     all_params = self.get_params(self.level -1 )
+
+    #     results = [
+    #         multiple_runs(self.runs, 
+    #         self.calculate_roc_combined, 
+    #         param) 
+    #         for param in all_params
+    #         ]   
+        
+    #     print("FINISH: results_combined")
 
 
-def main(parse_args):
-    paper_script_2023 = PaperScript2023(**parse_args.__dict__)
-    paper_script_2023.results()
+# def main(parse_args):
+#     paper_script_2023 = PaperScript2023(**parse_args.__dict__)
+#     # paper_script_2023.results()
 
 
-if __name__ == "__main__":
-    print("MTSA Pipeline")
-    print("Initializing...")
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--sampling_rate', type=int)
-    parser.add_argument('--path', type=str)
-    parser.add_argument('--n_components', type=int)
-    parser.add_argument('--level', type=int)
-    parser.add_argument('--perplexity', type=int)
-    parser.add_argument('--runs', type=int)
-    parser.add_argument('--output', type=str)
-    parse_args = parser.parse_args()
-    main(parse_args)
-    print("MTSA Pipeline: Finished")
+# if __name__ == "__main__":
+#     print("MTSA Pipeline")
+#     print("Initializing...")
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('--type', type=str)
+#     parser.add_argument('--sampling_rate', type=int)
+#     parser.add_argument('--path', type=str)
+#     parser.add_argument('--n_components', type=int)
+#     parser.add_argument('--level', type=int)
+#     parser.add_argument('--perplexity', type=int)
+#     parser.add_argument('--runs', type=int)
+#     parser.add_argument('--output', type=str)
+#     parse_args = parser.parse_args()
+#     main(parse_args)
+#     print("MTSA Pipeline: Finished")
+
+# def convert(match_obj):
+#             if match_obj.group(0) == '_':
+#                 return ""
+#             if match_obj.group(0) == '/':
+#                 return " "

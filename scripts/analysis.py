@@ -9,6 +9,12 @@ def read_data(path):
     return data
 
 
+def insert_run_id(group):
+    # print(group)
+    num_runs = len(group)
+    group['run_id'] = range(len(num_runs))
+    return group
+
 def read_df_from_json(path):
     data_fit = read_data(path = f"{path}_fit")
     data_roc = read_data(path = f"{path}_roc")
@@ -23,13 +29,25 @@ def read_df_from_json(path):
                             "roc time": param_result[1].result['time_elapsed'],
                             "roc value": param_result[1].result['fun_return'],
                         }
+                    # for param_result in list(zip(data_fit, data_roc))
                     for param_result in list(zip(data_fit, data_roc, range(len(data_fit))))
+
                 },
                 orient='index'
             )
+    
+
     if len(df):
-        df.index = df.index.set_names(['path', 'model', 'run id'])
+        df.index = df.index.set_names(['path', 'model', 'run_id'])
+
+    df_t = df.reset_index()
+
+    df_t.groupby(['path', 'model']).apply(lambda g: insert_run_id(g))
+
+
     return df
+
+
 
 def get_df_class_id_model(df):
     if not len(df):

@@ -2,7 +2,7 @@ FROM tensorflow/tensorflow:latest-gpu-jupyter
 
 RUN apt update  && apt-get -y install sudo vim  git nano openjdk-8-jdk
 
-RUN apt install libcairo2-dev
+RUN apt install libcairo2-dev graphviz
 RUN apt-get install -y libsndfile1
 
 COPY requirements.txt ./

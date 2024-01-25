@@ -23,7 +23,7 @@ class Wav2Array(BaseEstimator, TransformerMixin):
             else:
                 s, _ = lib.load(f, mono=self.mono)
                 return s
-        
+        np.random.seed(0)
         Xt = np.array(list(map(get_array, X)))
         return Xt
 

@@ -7,3 +7,4 @@ scikit-learn
 seaborn
 keras
 graphviz
+torch

@@ -46,7 +46,6 @@ class Demux2Array(BaseEstimator, TransformerMixin):
         Xt = np.array(list(map(get_array, X)))
         return Xt
 
-
 from sklearn.model_selection import BaseShuffleSplit
 from sklearn.utils.validation import check_random_state 
 from sklearn.model_selection._split import _validate_shuffle_split

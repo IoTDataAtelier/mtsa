@@ -8,7 +8,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, OutlierMixin
 from sklearn.pipeline import (Pipeline) 
 from mtsa.features.mel import (Array2Mfcc)
-from mtsa.models.GANF_model.components.NF import MAF, RealNVP
+from mtsa.models.GANF_model_components.NF import MAF, RealNVP
 from mtsa.utils import (Wav2Array,)
 from functools import reduce
 from torch.nn.init import xavier_uniform_

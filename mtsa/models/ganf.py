@@ -39,13 +39,13 @@ class GNN(nn.Module):
 
 class GANF(nn.Module, BaseEstimator, OutlierMixin):
     def __init__ (self, 
-                  n_blocks,
-                  input_size,
-                  hidden_size,
-                  n_hidden,
+                  n_blocks = 6,
+                  input_size = 1,
+                  hidden_size = 32,
+                  n_hidden = 1,
                   dropout = 0.1,
                   model="MAF",
-                  batch_norm=True,
+                  batch_norm=False,
                   rho = 1.0,
                   rho_max = float(1e16),
                   max_iteraction = 20,
@@ -55,7 +55,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
                   ):
         super(GANF, self).__init__()
 
-        self.adjacent_matrix = torch.tensor()
+        self.adjacent_matrix = None
         self.rho = rho         
         self.rho_max = rho_max     
         self.max_iteraction = max_iteraction    

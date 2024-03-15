@@ -6,13 +6,45 @@ import torch
 from functools import reduce
 import numpy as np
 from sklearn.base import BaseEstimator, OutlierMixin
-from sklearn.pipeline import (Pipeline) 
-from mtsa.features.mel import (Array2Mfcc)
 from mtsa.models.GANF_model_components.NF import MAF, RealNVP
-from mtsa.utils import (Wav2Array,)
 from functools import reduce
 from torch.nn.init import xavier_uniform_
 from torch.nn.utils import clip_grad_value_
+from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import Dataset
+import pandas as pd
+
+class AudioData(Dataset):
+    def __init__(self, df, window_size=12, stride_size=1):
+        super(AudioData, self).__init__()
+        self.df = df
+        self.window_size = window_size
+        self.stride_size = stride_size
+
+        self.data, self.idx, self.time = self.preprocess(df)
+    
+    def preprocess(self, df):
+        start_idx = np.arange(0,len(df)-self.window_size,self.stride_size)
+        end_idx = np.arange(self.window_size, len(df), self.stride_size)
+
+        delat_time =  df.index[end_idx]-df.index[start_idx]
+        idx_mask = delat_time
+
+        return df.values, start_idx[idx_mask], df.index[start_idx[idx_mask]]
+
+    def __len__(self):
+
+        length = len(self.idx)
+
+        return length
+
+    def __getitem__(self, index):
+        #  N X K X L X D 
+        start = self.idx[index]
+        end = start + self.window_size
+        data = self.data[start:end].reshape([self.window_size,-1, 1])
+
+        return torch.FloatTensor(data).transpose(0,1)
 
 class GNN(nn.Module):
     """
@@ -36,7 +68,6 @@ class GNN(nn.Module):
 
         return h
 
-
 class GANF(nn.Module, BaseEstimator, OutlierMixin):
     def __init__ (self, 
                   n_blocks = 6,
@@ -51,7 +82,8 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
                   max_iteraction = 20,
                   learning_rate = float(1e-3),
                   alpha = 0.0,
-                  weight_decay = float(5e-4)
+                  weight_decay = float(5e-4),
+                  n_epochs = 20
                   ):
         super(GANF, self).__init__()
 
@@ -62,7 +94,9 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
         self.learning_rate = learning_rate          
         self.alpha = alpha       
         self.weight_decay= weight_decay
-        
+        self.n_epochs = n_epochs
+        self.hidden_state = None
+
         #Reducing dimensionality 
         self.rnn = nn.LSTM(input_size=input_size,hidden_size=hidden_size,batch_first=True, dropout=dropout)
 
@@ -81,38 +115,46 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
     def name(self):
         return "GANF " + "+".join([f[0] for f in self.features])
         
-    def fit(self, X, y=None): #OK
+    def fit(self, X, y=None, batch_size =1): #OK
+        data_len = X.shape[0]
+        X = torch.tensor(X.T)
+        adjacent_matrix = self.__init_adjacent_matrix(X)
+        X = pd.DataFrame(X)
+        X = X.iloc[:int(len(X))]
+        X = DataLoader(AudioData(X), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
         for _ in range(self.max_iteraction):
 
             while self.rho < self.rho_max:
-                learning_rate = self.learning_rate #* np.math.pow(0.1, epoch // 100)
+                learning_rate = self.learning_rate #* np.math.pow(0.1, epoch // 100)    
                 optimizer = torch.optim.Adam([
                     {'params': self.parameters(), 'weight_decay':self.weight_decay},
-                    {'params': [adjacent_matrix]}], learning_rate=learning_rate, weight_decay=0.0)
+                    {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
 
-            for _ in range(self.epochs):
-                init = torch.zeros([X.shape[0], X.shape[0]])
-                init = xavier_uniform_(init).abs()
-                init = init.fill_diagonal_(0.0)
-                adjacent_matrix = torch.tensor(init, requires_grad=True)
+                for _ in range(self.n_epochs):
+                    loss_train = []
+                    self.train()
 
-                loss_train = []
-                epoch += 1
-                self.train()
+                    for x in X:
+                        optimizer.zero_grad()
+                        A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
+                        loss = -self.forward(x, A_hat)
+                        h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - data_len
+                        total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
+                        total_loss.backward()
+                        clip_grad_value_(self.parameters(), 1)
+                        optimizer.step()
+                        loss_train.append(loss.item())
+                        adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
 
-                for x in X:
-                    optimizer.zero_grad()
-                    A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
-                    loss = -self.forward(x, A_hat)
-                    h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - X.shape[0]
-                    total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
-
-                    total_loss.backward()
-                    clip_grad_value_(self.parameters(), 1)
-                    optimizer.step()
-                    loss_train.append(loss.item())
-                    self.adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
+        self.adjacent_matrix = adjacent_matrix
+        self.hidden_state = h
         return
+
+    def __init_adjacent_matrix(self, X):
+        init = torch.zeros([X.shape[1], X.shape[1]])
+        init = xavier_uniform_(init).abs()
+        init = init.fill_diagonal_(0.0)
+        return torch.tensor(init, requires_grad=True)
 
     def transform(self, X, y=None):
         l = list()
@@ -122,26 +164,15 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
         return Xt
     
     def predict(self, X):
-        return self.__forward(X, self.adjacent_matrix)
+        return self.forward(X, self.adjacent_matrix)
 
     def score_samples(self, X):
         return self.model.score_samples(X=X)
 
     def _build_model(self):
-        wav2array = Wav2Array(sampling_rate=self.sampling_rate)
-        array2mfcc = Array2Mfcc(sampling_rate=self.sampling_rate)
-        
-        model = Pipeline(
-            steps=[
-                ("wav2array", wav2array),
-                ("array2mfcc", array2mfcc),
-                ("final_model", self),
-                ]
-            )
-        
-        return model
+        return self 
     
-    def __forward(self, x, adjacent_matrix):
+    def forward(self, x, adjacent_matrix):
 
         return self.__test(x, adjacent_matrix).mean()
 
@@ -151,11 +182,11 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
 
         # reshape: N*K, L, D
         x = x.reshape((x.shape[0]*x.shape[1], x.shape[2], x.shape[3]))
+        #x = torch.tensor(x.reshape(x.shape[0],1))
         h,_ = self.rnn(x)
 
         # resahpe: N, K, L, H
         h = h.reshape((full_shape[0], full_shape[1], h.shape[1], h.shape[2]))
-
 
         h = self.gcn(h, adjacent_matrix)
 

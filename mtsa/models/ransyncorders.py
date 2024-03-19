@@ -1,18 +1,10 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Dec 16 12:30:26 2020
-
-@author: aabdulaal
-................................................................................................................................
-"""
-
 from joblib import dump, load
 import numpy as np
 import os
 from scipy.signal import find_peaks
 from spectrum import Periodogram
 import tensorflow as tf
-import tensorflow.keras.backend as K
+import tensorflow.python.keras.backend as K
 from tensorflow.python.keras.constraints import NonNeg
 from tensorflow.python.keras.layers import Dense, Layer
 from tensorflow.python.keras.layers import Input
@@ -20,7 +12,22 @@ from tensorflow.python.keras.models import Model, model_from_json
 from tensorflow.python.keras.initializers import Constant
 from typing import List, Optional
 
-class RANSynCoders():
+#Import steps by mtsa framework
+
+from sklearn.base import BaseEstimator, OutlierMixin
+from sklearn.pipeline import (
+    Pipeline, 
+    FeatureUnion
+) 
+
+from mtsa.features.mel import (
+    Array2Mfcc 
+)
+from mtsa.utils import (
+    Wav2Array,
+)
+
+class RANSynCoders(BaseEstimator, OutlierMixin):
     """ class for building, training, and testing rancoders models """
     def __init__(
             self,
@@ -43,6 +50,7 @@ class RANSynCoders():
             trainable_freq: bool = False,  # whether to make the frequency a variable during layer weight training
             bias: bool = True,  # add intercept (vertical displacement)
     ):
+        super.__init__()
         # Rancoders inputs:
         self.n_estimators = n_estimators
         self.max_features = max_features

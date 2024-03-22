@@ -12,7 +12,11 @@ from torch.nn.init import xavier_uniform_
 from torch.nn.utils import clip_grad_value_
 from torch.utils.data import TensorDataset, DataLoader
 from torch.utils.data import Dataset
+from mtsa.utils import Wav2Array
+from sklearn.pipeline import Pipeline
 import pandas as pd
+
+from mtsa.utils import Wav2Array
 
 class AudioData(Dataset):
     def __init__(self, df, window_size=12, stride_size=1):
@@ -68,7 +72,7 @@ class GNN(nn.Module):
 
         return h
 
-class GANF(nn.Module, BaseEstimator, OutlierMixin):
+class GANFBaseModel(nn.Module):
     def __init__ (self, 
                   n_blocks = 6,
                   input_size = 1,
@@ -85,7 +89,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
                   weight_decay = float(5e-4),
                   n_epochs = 20
                   ):
-        super(GANF, self).__init__()
+        super().__init__()
 
         self.adjacent_matrix = None
         self.rho = rho         
@@ -113,30 +117,33 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
 
     @property
     def name(self):
-        return "GANF " + "+".join([f[0] for f in self.features])
+        return "GANFBaseModel " + "+".join([f[0] for f in self.features])
         
     def fit(self, X, y=None, batch_size =1): #OK
+        interaction_while = 0
+        h_A_old = np.inf
         data_len = X.shape[0]
-        X = torch.tensor(X.T)
         adjacent_matrix = self.__init_adjacent_matrix(X)
-        X = pd.DataFrame(X)
-        X = X.iloc[:int(len(X))]
-        X = DataLoader(AudioData(X), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
-        for _ in range(self.max_iteraction):
+        #X = pd.DataFrame(X)
+        #X = X.iloc[:int(len(X))]
+        #X = DataLoader(AudioData(X), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
+        for _ in range(1):
 
-            while self.rho < self.rho_max:
+            while interaction_while < 1:
                 learning_rate = self.learning_rate #* np.math.pow(0.1, epoch // 100)    
                 optimizer = torch.optim.Adam([
                     {'params': self.parameters(), 'weight_decay':self.weight_decay},
                     {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
 
-                for _ in range(self.n_epochs):
+                for _ in range(1):
                     loss_train = []
                     self.train()
 
                     for x in X:
+                        x =  torch.Tensor(x.reshape((x.shape[0],x.shape[1], 1)))
                         optimizer.zero_grad()
                         A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
+                        self.treat_NaN(A_hat)
                         loss = -self.forward(x, A_hat)
                         h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - data_len
                         total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
@@ -145,35 +152,38 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
                         optimizer.step()
                         loss_train.append(loss.item())
                         adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
+            if h.item() > 0.5 * h_A_old:
+                self.rho *= 10
+            else:
+                break
+            interaction_while +=1
 
         self.adjacent_matrix = adjacent_matrix
         self.hidden_state = h
         return
+    
+    def treat_NaN(self, matrix):
+        k = 0
+        j = 0
+        if matrix.isnan().any():
+            for k in range(len(matrix)):
+                for j in range(len(matrix[k])):
+                    if matrix[k][j].isnan():
+                        matrix[k][j] = 0
 
     def __init_adjacent_matrix(self, X):
         init = torch.zeros([X.shape[1], X.shape[1]])
         init = xavier_uniform_(init).abs()
         init = init.fill_diagonal_(0.0)
         return torch.tensor(init, requires_grad=True)
-
-    def transform(self, X, y=None):
-        l = list()
-        l.append(X)
-        l.extend(self.model.steps[:-1])
-        Xt = reduce(lambda x, y: y[1].transform(x), l)
-        return Xt
     
     def predict(self, X):
         return self.forward(X, self.adjacent_matrix)
 
     def score_samples(self, X):
-        return self.model.score_samples(X=X)
-
-    def _build_model(self):
-        return self 
+        return -1 * np.mean(np.square(X - self.predict(X))) 
     
     def forward(self, x, adjacent_matrix):
-
         return self.__test(x, adjacent_matrix).mean()
 
     def __test(self, x, adjacent_matrix):
@@ -198,5 +208,56 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
         log_prob = log_prob.mean(dim=1)
 
         return log_prob
+    
+    def get_adjacent_matrix(self):
+        return self.adjacent_matrix
 
+FINAL_MODEL = GANFBaseModel()
 
+class GANF(nn.Module, BaseEstimator, OutlierMixin):
+
+    def __init__(self, 
+                 final_model=FINAL_MODEL, 
+                 sampling_rate=None,
+                 random_state = None,
+                 ) -> None:
+        super().__init__()
+        self.sampling_rate = sampling_rate
+        self.final_model = final_model
+        self.random_state = random_state
+        self.model = self._build_model()
+
+    @property
+    def name(self):
+        return "GANF " + "+".join([f[0] for f in self.features])
+        
+    def fit(self, X, y=None):
+        return self.model.fit(X, y)
+
+    def transform(self, X, y=None):
+        l = list()
+        l.append(X)
+        l.extend(self.model.steps[:-1])
+        Xt = reduce(lambda x, y: y[1].transform(x), l)
+        return Xt
+    
+    def predict(self, X):
+        return self.model.predict(X)
+
+    def score_samples(self, X):
+        return self.model.score_samples(X=X)
+    
+    def get_adjacent_matrix(self):
+        return self.final_model.get_adjacent_matrix()
+
+    def _build_model(self):
+        wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=False)
+        
+        model = Pipeline(
+            steps=[
+                ("wav2array", wav2array),
+                ("final_model", self.final_model),
+                ]
+            )
+        
+        return model

@@ -118,16 +118,22 @@ class GANFBaseModel(nn.Module):
     @property
     def name(self):
         return "GANFBaseModel " + "+".join([f[0] for f in self.features])
+    
+    def create_dataLoader(self, X, batch_size =1):
+        X = X.reshape((X.shape[0]*X.shape[1], X.shape[2]))
+        X = torch.tensor(X.T)
+        X = pd.DataFrame(X)
+        X = X.iloc[:int(len(X))]
+        X_dataLoader = DataLoader(AudioData(X), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
+        return X_dataLoader
         
     def fit(self, X, y=None, batch_size =1): #OK
         interaction_while = 0
         h_A_old = np.inf
-        data_len = X.shape[0]
-        X = torch.tensor(X.T)
-        adjacent_matrix = self.__init_adjacent_matrix(X)
-        X = pd.DataFrame(X)
-        X = X.iloc[:int(len(X))]
-        X = DataLoader(AudioData(X), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
+        X = self.create_dataLoader(X, batch_size)
+        adjacent_matrix = self.__init_adjacent_matrix(X.dataset.data)
+        dimension = X.dataset.data.shape[1]
+        
         for _ in range(1):
 
             while interaction_while < 1:
@@ -141,18 +147,18 @@ class GANFBaseModel(nn.Module):
                     self.train()
 
                     for x in X:
-                        #x =  torch.Tensor(x.reshape((x.shape[0],x.shape[1], 1)))
                         optimizer.zero_grad()
                         A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
-                        self.treat_NaN(A_hat)
+                        self.__treat_NaN(A_hat)
                         loss = -self.forward(x, A_hat)
-                        h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - data_len
+                        h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - dimension
                         total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
                         total_loss.backward()
                         clip_grad_value_(self.parameters(), 1)
                         optimizer.step()
                         loss_train.append(loss.item())
                         adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
+                        self.adjacent_matrix = adjacent_matrix
             if h.item() > 0.5 * h_A_old:
                 self.rho *= 10
             else:
@@ -163,7 +169,7 @@ class GANFBaseModel(nn.Module):
         self.hidden_state = h
         return
     
-    def treat_NaN(self, matrix):
+    def __treat_NaN(self, matrix):
         k = 0
         j = 0
         if matrix.isnan().any():
@@ -182,12 +188,9 @@ class GANFBaseModel(nn.Module):
         return self.forward(X, self.adjacent_matrix).mean()
 
     def score_samples(self, X):
+        X_dataLoader = self.create_dataLoader(X)
         result = []
-        X = torch.tensor(X)
-        X = pd.DataFrame(X)
-        X = X.iloc[:int(len(X))]
-        X = DataLoader(AudioData(X, window_size=1), batch_size=1, shuffle=True, num_workers=0, persistent_workers=False)
-        for x in X:
+        for x in X_dataLoader:
             result.append(self.predict(X=x))
         return result
     
@@ -259,7 +262,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
         return self.final_model.get_adjacent_matrix()
 
     def _build_model(self):
-        wav2array = Wav2Array(sampling_rate=self.sampling_rate)
+        wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=False)
         
         model = Pipeline(
             steps=[

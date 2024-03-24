@@ -123,10 +123,11 @@ class GANFBaseModel(nn.Module):
         interaction_while = 0
         h_A_old = np.inf
         data_len = X.shape[0]
+        X = torch.tensor(X.T)
         adjacent_matrix = self.__init_adjacent_matrix(X)
-        #X = pd.DataFrame(X)
-        #X = X.iloc[:int(len(X))]
-        #X = DataLoader(AudioData(X), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
+        X = pd.DataFrame(X)
+        X = X.iloc[:int(len(X))]
+        X = DataLoader(AudioData(X), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
         for _ in range(1):
 
             while interaction_while < 1:
@@ -140,7 +141,7 @@ class GANFBaseModel(nn.Module):
                     self.train()
 
                     for x in X:
-                        x =  torch.Tensor(x.reshape((x.shape[0],x.shape[1], 1)))
+                        #x =  torch.Tensor(x.reshape((x.shape[0],x.shape[1], 1)))
                         optimizer.zero_grad()
                         A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
                         self.treat_NaN(A_hat)
@@ -178,10 +179,17 @@ class GANFBaseModel(nn.Module):
         return torch.tensor(init, requires_grad=True)
     
     def predict(self, X):
-        return self.forward(X, self.adjacent_matrix)
+        return self.forward(X, self.adjacent_matrix).mean()
 
     def score_samples(self, X):
-        return -1 * np.mean(np.square(X - self.predict(X))) 
+        result = []
+        X = torch.tensor(X)
+        X = pd.DataFrame(X)
+        X = X.iloc[:int(len(X))]
+        X = DataLoader(AudioData(X, window_size=1), batch_size=1, shuffle=True, num_workers=0, persistent_workers=False)
+        for x in X:
+            result.append(self.predict(X=x))
+        return result
     
     def forward(self, x, adjacent_matrix):
         return self.__test(x, adjacent_matrix).mean()
@@ -251,7 +259,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
         return self.final_model.get_adjacent_matrix()
 
     def _build_model(self):
-        wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=False)
+        wav2array = Wav2Array(sampling_rate=self.sampling_rate)
         
         model = Pipeline(
             steps=[

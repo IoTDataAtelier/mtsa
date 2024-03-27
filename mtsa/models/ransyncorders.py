@@ -1,7 +1,9 @@
+from functools import reduce
 from joblib import dump, load
 import numpy as np
 import os
 from scipy.signal import find_peaks
+from sklearn.preprocessing import MinMaxScaler
 from spectrum import Periodogram
 import tensorflow as tf
 import tensorflow.python.keras.backend as K
@@ -11,46 +13,33 @@ from tensorflow.python.keras.layers import Input
 from tensorflow.python.keras.models import Model, model_from_json
 from tensorflow.python.keras.initializers import Constant
 from typing import List, Optional
-
-#Import steps by mtsa framework
-
+from sklearn.pipeline import Pipeline
+from mtsa.utils import Wav2Array
 from sklearn.base import BaseEstimator, OutlierMixin
-from sklearn.pipeline import (
-    Pipeline, 
-    FeatureUnion
-) 
 
-from mtsa.features.mel import (
-    Array2Mfcc 
-)
-from mtsa.utils import (
-    Wav2Array,
-)
-
-class RANSynCoders(BaseEstimator, OutlierMixin):
+class RANSynCodersBase():
     """ class for building, training, and testing rancoders models """
     def __init__(
             self,
             # Rancoders inputs:
-            n_estimators: int = 100,
-            max_features: int = 3,
-            encoding_depth: int = 2,
-            latent_dim: int = 2, 
+            n_estimators: int = 10, #100
+            max_features: int = 4, #3
+            encoding_depth: int = 1, #2
+            latent_dim: int = 4, #2 
             decoding_depth: int = 2,
-            activation: str = 'linear',
-            output_activation: str = 'linear',
+            activation: str = 'relu', #linear
+            output_activation: str = 'sigmoid', #linear
             delta: float = 0.05,  # quantile bound for regression
             # Syncrhonization inputs
-            synchronize: bool = False,
+            synchronize: bool = True, #False
             force_synchronization: bool = True,  # if synchronization is true but no significant frequencies found
             min_periods: int = 3,  # if synchronize and forced, this is the minimum bound on cycles to look for in train set
             freq_init: Optional[List[float]] = None,  # initial guess for the dominant angular frequency
-            max_freqs: int = 1,  # the number of sinusoidal signals to fit
+            max_freqs: int = 5,  # the number of sinusoidal signals to fit = 1
             min_dist: int = 60,  # maximum distance for finding local maximums in the PSD
             trainable_freq: bool = False,  # whether to make the frequency a variable during layer weight training
             bias: bool = True,  # add intercept (vertical displacement)
     ):
-        super.__init__()
         # Rancoders inputs:
         self.n_estimators = n_estimators
         self.max_features = max_features
@@ -70,10 +59,9 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
         self.min_dist = min_dist
         self.trainable_freq = trainable_freq
         self.bias = bias
-        
         # set all variables to default to float32
         tf.keras.backend.set_floatx('float32')
-        
+
     def build(self, input_shape, initial_stage: bool = False):
         x_in = Input(shape=(input_shape[-1],))  # created for either raw signal or synchronized signal
         if initial_stage:
@@ -102,19 +90,31 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
                 sin_out = sincoder(freq_init=self.freq_init, trainable_freq=self.trainable_freq)(t_in)
                 self.sincoder = Model(inputs=t_in, outputs=sin_out)
                 self.sincoder.compile(optimizer='adam', loss=lambda y,f: quantile_loss(0.5, y,f))
+
+    def get_time_matrix(self, X):
+        X_transpose = X.T
+        indices_linha = np.arange(len(X_transpose), dtype=np.float32).reshape(-1, 1)
+        time_matrix = np.tile(indices_linha, (1, X_transpose.shape[1]))
+        return time_matrix
+    
+    def normalization(self, X):
+        xscaler = MinMaxScaler()
+        x_train_scaled = xscaler.fit_transform(X.T)
+        return x_train_scaled
         
     def fit(
             self, 
-            x: np.ndarray, 
+            x_input: np.ndarray, 
             t: np.ndarray,
-            epochs: int = 100, 
-            batch_size: int = 360, 
+            epochs: int = 10, #100
+            batch_size: int = 180, #360
             shuffle: bool = True, 
-            freq_warmup: int = 10,  # number of warmup epochs to prefit the frequency
-            sin_warmup: int = 10,  # number of warmup epochs to prefit the sinusoidal representation
+            freq_warmup: int = 5,  # number of warmup epochs to prefit the frequency = 10
+            sin_warmup: int = 5,  # number of warmup epochs to prefit the sinusoidal representation = 10
             pos_amp: bool = True,  # whether to constraint amplitudes to be +ve only
     ):
-        
+        t = self.get_time_matrix(x_input)
+        x = self.normalization(x_input) 
         # Prepare the training batches.
         dataset = tf.data.Dataset.from_tensor_slices((x.astype(np.float32), t.astype(np.float32)))
         if shuffle:
@@ -400,13 +400,11 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
             "bias": self.bias,
         }
         return config
-        
-        
+           
 # Loss function
 def quantile_loss(q, y, f):
     e = (y - f)
     return K.mean(K.maximum(q*e, (q-1)*e), axis=-1)
-
 
 class ParameterError(Exception):
 
@@ -414,6 +412,44 @@ class ParameterError(Exception):
         self.expression = expression
         self.message = message
 
+FINAL_MODEL = RANSynCodersBase()
+
+class RANSynCoders(BaseEstimator, OutlierMixin):
+    def __init__(self, 
+                 final_model = FINAL_MODEL, 
+                 sampling_rate = None,
+                 mono: bool = True,
+                ) -> None:
+        super().__init__()
+        self.sampling_rate = sampling_rate
+        self.mono = mono
+        self.final_model = final_model
+        self.model = self.build_model()
+
+    #@property
+    def name(self):
+        return "RANSynCoder " + "+".join([f[0] for f in self.features])
+        
+    def fit(self, X, y=None):
+        return self.model.fit(X, y)
+    
+    def predict(self, X):
+        return self.model.predict(X)
+
+    def score_samples(self, X):
+        return self.model.score_samples(X=X)
+
+    def build_model(self):
+        wav2array = Wav2Array(sampling_rate=self.sampling_rate)
+        
+        model = Pipeline(
+            steps=[
+                ("wav2array", wav2array),
+                ("final_model", self.final_model),
+                ]
+            )
+        
+        return model
 # ==============================================================================================================================
 # SINCODER
 # ==============================================================================================================================

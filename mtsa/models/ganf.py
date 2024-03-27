@@ -87,7 +87,8 @@ class GANFBaseModel(nn.Module):
                   learning_rate = float(1e-3),
                   alpha = 0.0,
                   weight_decay = float(5e-4),
-                  n_epochs = 20
+                  n_epochs = 20,
+                  device = None
                   ):
         super().__init__()
 
@@ -100,6 +101,7 @@ class GANFBaseModel(nn.Module):
         self.weight_decay= weight_decay
         self.n_epochs = n_epochs
         self.hidden_state = None
+        self.device = device
 
         #Reducing dimensionality 
         self.rnn = nn.LSTM(input_size=input_size,hidden_size=hidden_size,batch_first=True, dropout=dropout)
@@ -119,15 +121,20 @@ class GANFBaseModel(nn.Module):
     def name(self):
         return "GANFBaseModel " + "+".join([f[0] for f in self.features])
     
-    def create_dataLoader(self, X, batch_size =1):
-        X = X.reshape((X.shape[0]*X.shape[1], X.shape[2]))
-        X = torch.tensor(X.T)
+    def create_dataLoader(self, X, batch_size =1, window_size = 12):
+        X = X.reshape((X.shape[0]*X.shape[2], X.shape[1]))
+        if batch_size == 100:
+            X = X[0:1000]
+        else:
+            X = X[0:500]
+        X = torch.tensor(X)
         X = pd.DataFrame(X)
         X = X.iloc[:int(len(X))]
-        X_dataLoader = DataLoader(AudioData(X), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
+        X_dataLoader = DataLoader(AudioData(X, window_size=window_size), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
         return X_dataLoader
+
         
-    def fit(self, X, y=None, batch_size =1): #OK
+    def fit(self, X, y=None, batch_size =1): 
         interaction_while = 0
         h_A_old = np.inf
         X = self.create_dataLoader(X, batch_size)
@@ -185,14 +192,14 @@ class GANFBaseModel(nn.Module):
         return torch.tensor(init, requires_grad=True)
     
     def predict(self, X):
-        return self.forward(X, self.adjacent_matrix).mean()
+        return self.forward(X, self.adjacent_matrix)
 
     def score_samples(self, X):
-        X_dataLoader = self.create_dataLoader(X)
+        X_dataLoader = self.create_dataLoader(X, batch_size=100)
         result = []
         for x in X_dataLoader:
             result.append(self.predict(X=x))
-        return result
+        return torch.tensor(result)
     
     def forward(self, x, adjacent_matrix):
         return self.__test(x, adjacent_matrix).mean()

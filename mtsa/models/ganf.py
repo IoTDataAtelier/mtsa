@@ -101,7 +101,13 @@ class GANFBaseModel(nn.Module):
         self.weight_decay= weight_decay
         self.n_epochs = n_epochs
         self.hidden_state = None
-        self.device = device
+
+        # if device != None: 
+        #     self.device = device
+        # else:
+        #      self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        #self.to(device=self.device)
 
         #Reducing dimensionality 
         self.rnn = nn.LSTM(input_size=input_size,hidden_size=hidden_size,batch_first=True, dropout=dropout)
@@ -123,10 +129,6 @@ class GANFBaseModel(nn.Module):
     
     def create_dataLoader(self, X, batch_size =1, window_size = 12):
         X = X.reshape((X.shape[0]*X.shape[2], X.shape[1]))
-        if batch_size == 100:
-            X = X[0:1000]
-        else:
-            X = X[0:500]
         X = torch.tensor(X)
         X = pd.DataFrame(X)
         X = X.iloc[:int(len(X))]
@@ -154,6 +156,7 @@ class GANFBaseModel(nn.Module):
                     self.train()
 
                     for x in X:
+                        #x = x.to(self.device)
                         optimizer.zero_grad()
                         A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
                         self.__treat_NaN(A_hat)
@@ -195,7 +198,7 @@ class GANFBaseModel(nn.Module):
         return self.forward(X, self.adjacent_matrix)
 
     def score_samples(self, X):
-        X_dataLoader = self.create_dataLoader(X, batch_size=100)
+        X_dataLoader = self.create_dataLoader(X)
         result = []
         for x in X_dataLoader:
             result.append(self.predict(X=x))
@@ -263,7 +266,13 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
         return self.model.predict(X)
 
     def score_samples(self, X):
-        return self.model.score_samples(X=X)
+        return np.array(
+            list(
+                map(
+                    self.model.score_samples, 
+                    [[x] for x in X])
+                )
+            )
     
     def get_adjacent_matrix(self):
         return self.final_model.get_adjacent_matrix()

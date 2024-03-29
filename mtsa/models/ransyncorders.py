@@ -96,8 +96,11 @@ class RANSynCodersBase():
         time_matrix = np.tile(indices_linha, (1, X.shape[1]))
         return time_matrix
     
-    def normalization(self, X):
-        return X.T
+    def normalization(self, x):
+        reshape_data = x.reshape((x.shape[0]*x.shape[2], x.shape[1]))
+        xscaler = MinMaxScaler()
+        x_train_scaled = xscaler.fit_transform(reshape_data)
+        return x_train_scaled
         
     def fit(
             self, 
@@ -110,7 +113,7 @@ class RANSynCodersBase():
             sin_warmup: int = 5,  # number of warmup epochs to prefit the sinusoidal representation = 10
             pos_amp: bool = True,  # whether to constraint amplitudes to be +ve only
     ):
-        x = x_input.reshape((x_input.shape[0]*x_input.shape[2], x_input.shape[1]))
+        x = self.normalization(x_input)
         t = self.get_time_matrix(x)
         # Prepare the training batches.
         dataset = tf.data.Dataset.from_tensor_slices((x.astype(np.float32), t.astype(np.float32)))
@@ -288,12 +291,12 @@ class RANSynCodersBase():
                     end='\r'
                 )
             
-    def predict(self, x: np.ndarray, t: np.ndarray, batch_size: int = 1000, desync: bool = False):
+    def predict(self, x: np.ndarray, batch_size: int = 1000, desync: bool = False):
         # Prepare the training batches.
         dataset = tf.data.Dataset.from_tensor_slices((x.astype(np.float32), t.astype(np.float32)))
         dataset = dataset.batch(batch_size)
         batches = int(np.ceil(x.shape[0] / batch_size))
-        
+        t = self.get_time_matrix(x)
         # loop through the batches of the dataset.
         if self.synchronize:
             s, x_sync, o_hi, o_lo = [None] * batches, [None] * batches, [None] * batches, [None] * batches
@@ -330,7 +333,20 @@ class RANSynCodersBase():
                 o_hi_i, o_lo_i = tf.transpose(o_hi_i, [1,0,2]).numpy(), tf.transpose(o_lo_i, [1,0,2]).numpy()
                 o_hi[step], o_lo[step]  = o_hi_i, o_lo_i
             return np.concatenate(o_hi, axis=0), np.concatenate(o_lo, axis=0)
-        
+    
+    def score_samples(self, X):
+        x_scaled = self.normalization2(X)
+        sins, synched, upper, lower = self.predict(x_scaled)
+        synched_tiles = np.tile(synched.reshape(synched.shape[0], 1, synched.shape[1]), (1, 10, 1))
+        result = np.where((synched_tiles < lower) | (synched_tiles > upper), 1, 0)
+        return np.mean(result)
+    
+    def normalization2(self, x):
+        reshape_data = x.reshape((x.shape[0]*x.shape[2], x.shape[1]))
+        xscaler = MinMaxScaler()
+        #x_train_scaled = xscaler.transform(reshape_data)
+        return reshape_data
+
     def save(self, filepath: str = os.path.join(os.getcwd(), 'ransyncoders.z')):
         file = {'params': self.get_config()}
         if self.synchronize:
@@ -434,7 +450,14 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
         return self.model.predict(X)
 
     def score_samples(self, X):
-        return self.model.score_samples(X=X)
+        return np.array(
+            list(
+                map(
+                    self.model.score_samples, 
+                    [[x] for x in X])
+                )
+            )
+        
 
     def build_model(self):
         wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=self.mono)

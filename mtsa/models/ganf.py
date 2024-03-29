@@ -198,11 +198,11 @@ class GANFBaseModel(nn.Module):
         return self.forward(X, self.adjacent_matrix)
 
     def score_samples(self, X):
-        X_dataLoader = self.create_dataLoader(X)
+        X_dataLoader = self.create_dataLoader(X, window_size=1)
         result = []
         for x in X_dataLoader:
             result.append(self.predict(X=x))
-        return torch.tensor(result)
+        return torch.tensor(result).mean()
     
     def forward(self, x, adjacent_matrix):
         return self.__test(x, adjacent_matrix).mean()

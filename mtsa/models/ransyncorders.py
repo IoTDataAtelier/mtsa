@@ -92,15 +92,12 @@ class RANSynCodersBase():
                 self.sincoder.compile(optimizer='adam', loss=lambda y,f: quantile_loss(0.5, y,f))
 
     def get_time_matrix(self, X):
-        X_transpose = X.T
-        indices_linha = np.arange(len(X_transpose), dtype=np.float32).reshape(-1, 1)
-        time_matrix = np.tile(indices_linha, (1, X_transpose.shape[1]))
+        indices_linha = np.arange(len(X), dtype=np.float32).reshape(-1, 1)
+        time_matrix = np.tile(indices_linha, (1, X.shape[1]))
         return time_matrix
     
     def normalization(self, X):
-        xscaler = MinMaxScaler()
-        x_train_scaled = xscaler.fit_transform(X.T)
-        return x_train_scaled
+        return X.T
         
     def fit(
             self, 
@@ -113,8 +110,8 @@ class RANSynCodersBase():
             sin_warmup: int = 5,  # number of warmup epochs to prefit the sinusoidal representation = 10
             pos_amp: bool = True,  # whether to constraint amplitudes to be +ve only
     ):
-        t = self.get_time_matrix(x_input)
-        x = self.normalization(x_input) 
+        x = x_input.reshape((x_input.shape[0]*x_input.shape[2], x_input.shape[1]))
+        t = self.get_time_matrix(x)
         # Prepare the training batches.
         dataset = tf.data.Dataset.from_tensor_slices((x.astype(np.float32), t.astype(np.float32)))
         if shuffle:
@@ -440,7 +437,7 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
         return self.model.score_samples(X=X)
 
     def build_model(self):
-        wav2array = Wav2Array(sampling_rate=self.sampling_rate)
+        wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=self.mono)
         
         model = Pipeline(
             steps=[

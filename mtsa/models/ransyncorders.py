@@ -292,11 +292,12 @@ class RANSynCodersBase():
                 )
             
     def predict(self, x: np.ndarray, batch_size: int = 1000, desync: bool = False):
+        t = self.get_time_matrix(x)
         # Prepare the training batches.
         dataset = tf.data.Dataset.from_tensor_slices((x.astype(np.float32), t.astype(np.float32)))
         dataset = dataset.batch(batch_size)
         batches = int(np.ceil(x.shape[0] / batch_size))
-        t = self.get_time_matrix(x)
+        
         # loop through the batches of the dataset.
         if self.synchronize:
             s, x_sync, o_hi, o_lo = [None] * batches, [None] * batches, [None] * batches, [None] * batches
@@ -335,16 +336,16 @@ class RANSynCodersBase():
             return np.concatenate(o_hi, axis=0), np.concatenate(o_lo, axis=0)
     
     def score_samples(self, X):
-        x_scaled = self.normalization2(X)
+        x_scaled = self.normalization(X)
         sins, synched, upper, lower = self.predict(x_scaled)
         synched_tiles = np.tile(synched.reshape(synched.shape[0], 1, synched.shape[1]), (1, 10, 1))
         result = np.where((synched_tiles < lower) | (synched_tiles > upper), 1, 0)
         return np.mean(result)
-    
+
     def normalization2(self, x):
         reshape_data = x.reshape((x.shape[0]*x.shape[2], x.shape[1]))
         xscaler = MinMaxScaler()
-        #x_train_scaled = xscaler.transform(reshape_data)
+        x_train_scaled = xscaler.transform(reshape_data)
         return reshape_data
 
     def save(self, filepath: str = os.path.join(os.getcwd(), 'ransyncoders.z')):

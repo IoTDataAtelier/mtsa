@@ -59,6 +59,7 @@ class RANSynCodersBase():
         self.min_dist = min_dist
         self.trainable_freq = trainable_freq
         self.bias = bias
+        self.x_scaler = MinMaxScaler()
         # set all variables to default to float32
         tf.keras.backend.set_floatx('float32')
 
@@ -90,21 +91,10 @@ class RANSynCodersBase():
                 sin_out = SinusoidalCoder(freq_init=self.freq_init, trainable_freq=self.trainable_freq)(t_in)
                 self.sincoder = Model(inputs=t_in, outputs=sin_out)
                 self.sincoder.compile(optimizer='adam', loss=lambda y,f: quantile_loss(0.5, y,f))
-
-    def get_time_matrix(self, X):
-        indices_linha = np.arange(len(X), dtype=np.float32).reshape(-1, 1)
-        time_matrix = np.tile(indices_linha, (1, X.shape[1]))
-        return time_matrix
-    
-    def normalization(self, x):
-        reshape_data = x.reshape((x.shape[0]*x.shape[2], x.shape[1]))
-        xscaler = MinMaxScaler()
-        x_train_scaled = xscaler.fit_transform(reshape_data)
-        return x_train_scaled
         
     def fit(
             self, 
-            x_input: np.ndarray, 
+            x: np.ndarray, 
             t: np.ndarray,
             epochs: int = 10, #old default value = 100
             batch_size: int = 180, #old default value = 360
@@ -113,20 +103,20 @@ class RANSynCodersBase():
             sin_warmup: int = 5,  # number of warmup epochs to prefit the sinusoidal representation = 10 (old default value)
             pos_amp: bool = True,  # whether to constraint amplitudes to be +ve only
     ):
-        x = self.normalization(x_input)
-        t = self.get_time_matrix(x)
+        x_normalized = self.normalization_to_fit(x)
+        time_matrix = self.get_time_matrix(x_normalized)
         # Prepare the training batches.
-        dataset = tf.data.Dataset.from_tensor_slices((x.astype(np.float32), t.astype(np.float32)))
+        dataset = tf.data.Dataset.from_tensor_slices((x_normalized.astype(np.float32), time_matrix.astype(np.float32)))
         if shuffle:
-            dataset = dataset.shuffle(buffer_size=x.shape[0]).batch(batch_size)
+            dataset = dataset.shuffle(buffer_size=x_normalized.shape[0]).batch(batch_size)
             
         # build and compile models (stage 1)
         if self.synchronize:
-            self.build(x.shape, initial_stage=True)
+            self.build(x_normalized.shape, initial_stage=True)
             if self.freq_init:
-                self.build(x.shape)
+                self.build(x_normalized.shape)
         else:
-            self.build(x.shape)
+            self.build(x_normalized.shape)
         
         # pretraining step 1:
         if freq_warmup > 0 and self.synchronize and not self.freq_init:
@@ -147,7 +137,7 @@ class RANSynCodersBase():
                 print("pre-reconstruction_loss:", tf.reduce_mean(x_loss).numpy(), end='\r')
                 
             # estimate dominant frequency
-            z = self.freqcoder(x)[0].numpy().reshape(-1)  # must be done on full unshuffled series
+            z = self.freqcoder(x_normalized)[0].numpy().reshape(-1)  # must be done on full unshuffled series
             z = ((z - z.min()) / (z.max() - z.min())) * (1 - -1) + -1  #  scale between -1 & 1
             p = Periodogram(z, sampling=1)
             p()
@@ -167,7 +157,7 @@ class RANSynCodersBase():
                 print('no common oscillations found, switching off synchronization attempts')
             
             # build and compile models (stage 2)
-            self.build(x.shape)
+            self.build(x_normalized.shape)
         
         # pretraining step 2:
         if sin_warmup > 0 and self.synchronize:
@@ -335,18 +325,35 @@ class RANSynCodersBase():
                 o_hi[step], o_lo[step]  = o_hi_i, o_lo_i
             return np.concatenate(o_hi, axis=0), np.concatenate(o_lo, axis=0)
     
+    def get_time_matrix(self, X):
+        #each line represents an instant of time in each time series
+        row_indices = np.arange(len(X), dtype=np.float32).reshape(-1, 1)
+        time_matrix = np.tile(row_indices, (1, X.shape[1]))
+        return time_matrix
+    
+    def normalization_to_fit(self, X):
+        #Possible refactor is extract this preprocessing data to a pipeline class - TO DO
+        reshape_data = self.reshape_data(X)
+        x_scaled = self.x_scaler.fit_transform(reshape_data)
+        return x_scaled
+    
+    def normalization_to_predict(self, X):
+        #Possible refactor is extract this preprocessing data to a pipeline class - TO DO
+        reshape_data = self.reshape_data(X)
+        x_scaled = self.x_scaler.transform(reshape_data)
+        return x_scaled
+
+    def reshape_data(self, X : np.ndarray):
+        x_redimensionaded = X.reshape((X.shape[0]*X.shape[2], X.shape[1]))
+        x_fillna = np.nan_to_num(x_redimensionaded)
+        return x_fillna
+
     def score_samples(self, X):
-        x_scaled = self.normalization(X)
+        x_scaled = self.normalization_to_predict(X)
         sins, synched, upper, lower = self.predict(x_scaled)
         synched_tiles = np.tile(synched.reshape(synched.shape[0], 1, synched.shape[1]), (1, 10, 1))
         result = np.where((synched_tiles < lower) | (synched_tiles > upper), 1, 0)
         return np.mean(result)
-
-    def normalization2(self, x):
-        reshape_data = x.reshape((x.shape[0]*x.shape[2], x.shape[1]))
-        xscaler = MinMaxScaler()
-        x_train_scaled = xscaler.transform(reshape_data)
-        return reshape_data
 
     def save(self, filepath: str = os.path.join(os.getcwd(), 'ransyncoders.z')):
         file = {'params': self.get_config()}

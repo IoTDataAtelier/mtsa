@@ -3,6 +3,7 @@ from sklearn.base import BaseEstimator, OutlierMixin
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
+import gc
 from functools import reduce
 import numpy as np
 from sklearn.base import BaseEstimator, OutlierMixin
@@ -55,7 +56,6 @@ class GNN(nn.Module):
     The GNN module applied in GANF
     """
     def __init__(self, input_size, hidden_size):
-
         super(GNN, self).__init__()
         self.lin_n = nn.Linear(input_size, hidden_size)
         self.lin_r = nn.Linear(input_size, hidden_size, bias=False)
@@ -87,7 +87,7 @@ class GANFBaseModel(nn.Module):
                   learning_rate = float(1e-3),
                   alpha = 0.0,
                   weight_decay = float(5e-4),
-                  n_epochs = 20,
+                  epochs = 20,
                   device = None
                   ):
         super().__init__()
@@ -99,35 +99,37 @@ class GANFBaseModel(nn.Module):
         self.learning_rate = learning_rate          
         self.alpha = alpha       
         self.weight_decay= weight_decay
-        self.n_epochs = n_epochs
+        self.epochs = epochs
         self.hidden_state = None
 
-        # if device != None: 
-        #     self.device = device
-        # else:
-        #      self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        #self.to(device=self.device)
+        if device != None: 
+            self.device = device
+        else:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.to(device=self.device)
 
         #Reducing dimensionality 
-        self.rnn = nn.LSTM(input_size=input_size,hidden_size=hidden_size,batch_first=True, dropout=dropout)
+        self.rnn = nn.LSTM(input_size=input_size,hidden_size=hidden_size,batch_first=True, dropout=dropout, device=self.device)
 
         # Graph Neural Networks model
         self.gcn = GNN(input_size=hidden_size, hidden_size=hidden_size) 
+        self.gcn.to(self.device)
 
         #probability density estimation
         if model=="MAF":
             #Masked auto regressive flow
             self.nf = MAF(n_blocks, input_size, hidden_size, n_hidden, cond_label_size=hidden_size, batch_norm=batch_norm,activation='tanh')
+            self.nf.to(self.device)
         else:
             #real-valued non-volume preserving (real NVP)
             self.nf = RealNVP(n_blocks, input_size, hidden_size, n_hidden, cond_label_size=hidden_size, batch_norm=batch_norm)
+            self.nf.to(self.device)
 
     @property
     def name(self):
         return "GANFBaseModel " + "+".join([f[0] for f in self.features])
     
-    def create_dataLoader(self, X, batch_size =1, window_size = 12):
+    def create_dataLoader(self, X, batch_size = 128, window_size = 12):
         X = X.reshape((X.shape[0]*X.shape[2], X.shape[1]))
         X = torch.tensor(X)
         X = pd.DataFrame(X)
@@ -136,48 +138,40 @@ class GANFBaseModel(nn.Module):
         return X_dataLoader
 
         
-    def fit(self, X, y=None, batch_size =1): 
-        interaction_while = 0
-        h_A_old = np.inf
+    def fit(self, X, y=None, batch_size = 128):
+        torch.cuda.empty_cache()
+        gc.collect()
         X = self.create_dataLoader(X, batch_size)
         adjacent_matrix = self.__init_adjacent_matrix(X.dataset.data)
         dimension = X.dataset.data.shape[1]
         
-        for _ in range(1):
+        for _ in range(self.max_iteraction):
+            learning_rate = self.learning_rate #* np.math.pow(0.1, epoch // 100)    
+            optimizer = torch.optim.Adam([
+                {'params': self.parameters(), 'weight_decay':self.weight_decay},
+                {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
 
-            while interaction_while < 1:
-                learning_rate = self.learning_rate #* np.math.pow(0.1, epoch // 100)    
-                optimizer = torch.optim.Adam([
-                    {'params': self.parameters(), 'weight_decay':self.weight_decay},
-                    {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
+            for _ in range(self.epochs):
+                loss_train = []
+                self.train()
 
-                for _ in range(1):
-                    loss_train = []
-                    self.train()
-
-                    for x in X:
-                        #x = x.to(self.device)
-                        optimizer.zero_grad()
-                        A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
-                        self.__treat_NaN(A_hat)
-                        loss = -self.forward(x, A_hat)
-                        h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - dimension
-                        total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
-                        total_loss.backward()
-                        clip_grad_value_(self.parameters(), 1)
-                        optimizer.step()
-                        loss_train.append(loss.item())
-                        adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
-                        self.adjacent_matrix = adjacent_matrix
-            if h.item() > 0.5 * h_A_old:
-                self.rho *= 10
-            else:
-                break
-            interaction_while +=1
+                for x in X:
+                    x = x.to(self.device)
+                    optimizer.zero_grad()
+                    A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
+                    self.__treat_NaN(A_hat)
+                    loss = -self.forward(x, A_hat)
+                    h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - dimension
+                    total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
+                    total_loss.backward()
+                    clip_grad_value_(self.parameters(), 1)
+                    optimizer.step()
+                    loss_train.append(loss.item())
+                    adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
+                    self.adjacent_matrix = adjacent_matrix
 
         self.adjacent_matrix = adjacent_matrix
         self.hidden_state = h
-        return
     
     def __treat_NaN(self, matrix):
         k = 0
@@ -208,6 +202,7 @@ class GANFBaseModel(nn.Module):
         return self.__test(x, adjacent_matrix).mean()
 
     def __test(self, x, adjacent_matrix):
+        self.gcn.to(self.device)
         # x: N X K X L X D 
         full_shape = x.shape
 
@@ -218,7 +213,8 @@ class GANFBaseModel(nn.Module):
 
         # resahpe: N, K, L, H
         h = h.reshape((full_shape[0], full_shape[1], h.shape[1], h.shape[2]))
-
+        h = h.to(self.device)
+        adjacent_matrix = adjacent_matrix.to(self.device)
         h = self.gcn(h, adjacent_matrix)
 
         # reshappe N*K*L,H

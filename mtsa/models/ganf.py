@@ -83,11 +83,11 @@ class GANFBaseModel(nn.Module):
                   batch_norm=False,
                   rho = 1.0,
                   rho_max = float(1e16),
-                  max_iteraction = 20,
+                  max_iteraction = 1,
                   learning_rate = float(1e-3),
                   alpha = 0.0,
                   weight_decay = float(5e-4),
-                  epochs = 20,
+                  epochs = 5,
                   device = None
                   ):
         super().__init__()
@@ -151,9 +151,10 @@ class GANFBaseModel(nn.Module):
                 {'params': self.parameters(), 'weight_decay':self.weight_decay},
                 {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
 
-            for _ in range(self.epochs):
+            for i in range(self.epochs):
                 loss_train = []
                 self.train()
+                print('epoch ' + str(i) + ' of ' + str(self.epochs))
 
                 for x in X:
                     x = x.to(self.device)
@@ -195,6 +196,7 @@ class GANFBaseModel(nn.Module):
         X_dataLoader = self.create_dataLoader(X, window_size=1)
         result = []
         for x in X_dataLoader:
+            x = x.to(self.device)
             result.append(self.predict(X=x))
         return torch.tensor(result).mean()
     

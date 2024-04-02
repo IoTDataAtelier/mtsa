@@ -87,7 +87,7 @@ class GANFBaseModel(nn.Module):
                   learning_rate = float(1e-3),
                   alpha = 0.0,
                   weight_decay = float(5e-4),
-                  epochs = 5,
+                  epochs = 1,
                   device = None
                   ):
         super().__init__()
@@ -138,7 +138,7 @@ class GANFBaseModel(nn.Module):
         return X_dataLoader
 
         
-    def fit(self, X, y=None, batch_size = 128):
+    def fit(self, X, y=None, batch_size = 32):
         torch.cuda.empty_cache()
         gc.collect()
         X = self.create_dataLoader(X, batch_size)
@@ -146,7 +146,7 @@ class GANFBaseModel(nn.Module):
         dimension = X.dataset.data.shape[1]
         
         for _ in range(self.max_iteraction):
-            learning_rate = self.learning_rate #* np.math.pow(0.1, epoch // 100)    
+            learning_rate = np.math.pow(0.1, epoch // 100)    
             optimizer = torch.optim.Adam([
                 {'params': self.parameters(), 'weight_decay':self.weight_decay},
                 {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)

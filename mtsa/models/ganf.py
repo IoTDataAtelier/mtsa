@@ -87,7 +87,7 @@ class GANFBaseModel(nn.Module):
                   learning_rate = float(1e-3),
                   alpha = 0.0,
                   weight_decay = float(5e-4),
-                  epochs = 1,
+                  epochs = 5,
                   device = None
                   ):
         super().__init__()
@@ -141,35 +141,55 @@ class GANFBaseModel(nn.Module):
     def fit(self, X, y=None, batch_size = 32):
         torch.cuda.empty_cache()
         gc.collect()
+
+        h_A_old = np.inf
+        h_tol = float(1e-6)
+
         X = self.create_dataLoader(X, batch_size)
         adjacent_matrix = self.__init_adjacent_matrix(X.dataset.data)
         dimension = X.dataset.data.shape[1]
         
         for _ in range(self.max_iteraction):
-            learning_rate = np.math.pow(0.1, epoch // 100)    
-            optimizer = torch.optim.Adam([
-                {'params': self.parameters(), 'weight_decay':self.weight_decay},
-                {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
 
-            for i in range(self.epochs):
-                loss_train = []
-                self.train()
-                print('epoch ' + str(i) + ' of ' + str(self.epochs))
+            while self.rho < self.rho_max:
+                learning_rate = self.learning_rate #np.math.pow(0.1, epoch // 100)    
+                optimizer = torch.optim.Adam([
+                    {'params': self.parameters(), 'weight_decay':self.weight_decay},
+                    {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
 
-                for x in X:
-                    x = x.to(self.device)
-                    optimizer.zero_grad()
-                    A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
-                    self.__treat_NaN(A_hat)
-                    loss = -self.forward(x, A_hat)
-                    h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - dimension
-                    total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
-                    total_loss.backward()
-                    clip_grad_value_(self.parameters(), 1)
-                    optimizer.step()
-                    loss_train.append(loss.item())
-                    adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
-                    self.adjacent_matrix = adjacent_matrix
+                for i in range(self.epochs):
+                        loss_train = []
+                        self.train()
+                        print('epoch ' + str(i) + ' of ' + str(self.epochs))
+
+                        for x in X:
+                            x = x.to(self.device)
+                            optimizer.zero_grad()
+                            A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
+                            self.__treat_NaN(A_hat)
+                            loss = -self.forward(x, A_hat)
+                            h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - dimension
+                            total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
+                            total_loss.backward()
+                            clip_grad_value_(self.parameters(), 1)
+                            optimizer.step()
+                            loss_train.append(loss.item())
+                            adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
+                            self.adjacent_matrix = adjacent_matrix
+
+                del optimizer
+                torch.cuda.empty_cache()
+
+                if h.item() > 0.5 * h_A_old:
+                    self.rho *= 10
+                else:
+                    break
+            
+            h_A_old = h.item()
+            self.alpha += self.rho*h.item()
+
+            if h_A_old <= h_tol or self.rho >= self.rho_max:
+                break
 
         self.adjacent_matrix = adjacent_matrix
         self.hidden_state = h

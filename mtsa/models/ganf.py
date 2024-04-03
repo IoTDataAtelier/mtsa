@@ -87,7 +87,7 @@ class GANFBaseModel(nn.Module):
                   learning_rate = float(1e-3),
                   alpha = 0.0,
                   weight_decay = float(5e-4),
-                  epochs = 5,
+                  epochs = 1,
                   device = None
                   ):
         super().__init__()
@@ -129,7 +129,10 @@ class GANFBaseModel(nn.Module):
     def name(self):
         return "GANFBaseModel " + "+".join([f[0] for f in self.features])
     
-    def create_dataLoader(self, X, batch_size = 128, window_size = 12):
+    def create_dataLoader(self, X, batch_size = None, window_size = 12):
+        if batch_size is None:
+            batch_size = 32
+
         X = X.reshape((X.shape[0]*X.shape[2], X.shape[1]))
         X = torch.tensor(X)
         X = pd.DataFrame(X)
@@ -138,9 +141,14 @@ class GANFBaseModel(nn.Module):
         return X_dataLoader
 
         
-    def fit(self, X, y=None, batch_size = 32):
+    def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None):
         torch.cuda.empty_cache()
         gc.collect()
+
+        if epochs is not None:
+           self.epochs = epochs
+        if max_iteraction is not None:
+            self.max_iteraction =  max_iteraction
 
         h_A_old = np.inf
         h_tol = float(1e-6)
@@ -270,8 +278,11 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
     def name(self):
         return "GANF " + "+".join([f[0] for f in self.features])
         
-    def fit(self, X, y=None):
-        return self.model.fit(X, y)
+    def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None):
+        return self.model.fit(X, y, 
+                              final_model__batch_size=batch_size,
+                              final_model__epochs=epochs,
+                              final_model__max_iteraction=max_iteraction,)
 
     def transform(self, X, y=None):
         l = list()

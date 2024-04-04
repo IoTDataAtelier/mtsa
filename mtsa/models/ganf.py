@@ -135,8 +135,7 @@ class GANFBaseModel(nn.Module):
     def name(self):
         return "GANFBaseModel " + "+".join([f[0] for f in self.features])
       
-    @property
-    def adjacent_matrix(self):
+    def get_adjacent_matrix(self):
         return self.adjacent_matrix
 
     def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None):

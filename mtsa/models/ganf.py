@@ -8,13 +8,14 @@ import random
 from functools import reduce
 import numpy as np
 from sklearn.base import BaseEstimator, OutlierMixin
-from mtsa.models.GANF_model_components.NF import MAF, RealNVP
+
 from functools import reduce
 from torch.nn.init import xavier_uniform_
 from torch.nn.utils import clip_grad_value_
 from torch.utils.data import TensorDataset, DataLoader
-from mtsa.models.GANF_model_components.audiodata import AudioData
-from mtsa.models.GANF_model_components.gnn import GNN
+from mtsa.models.GANF_components.NF import MAF, RealNVP
+from mtsa.models.GANF_components.audiodata import AudioData
+from mtsa.models.GANF_components.gnn import GNN
 from mtsa.utils import Wav2Array
 from sklearn.pipeline import Pipeline
 import pandas as pd

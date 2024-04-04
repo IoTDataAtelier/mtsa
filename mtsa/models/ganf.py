@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import gc
+import random
 from functools import reduce
 import numpy as np
 from sklearn.base import BaseEstimator, OutlierMixin
@@ -33,7 +34,7 @@ class AudioData(Dataset):
         end_idx = np.arange(self.window_size, len(df), self.stride_size)
 
         delat_time =  df.index[end_idx]-df.index[start_idx]
-        idx_mask = delat_time
+        idx_mask = delat_time==pd.Timedelta(self.window_size,unit='s')
 
         return df.values, start_idx[idx_mask], df.index[start_idx[idx_mask]]
 
@@ -78,7 +79,7 @@ class GANFBaseModel(nn.Module):
                   input_size = 1,
                   hidden_size = 32,
                   n_hidden = 1,
-                  dropout = 0.1,
+                  dropout = 0.0,
                   model="MAF",
                   batch_norm=False,
                   rho = 1.0,
@@ -107,6 +108,11 @@ class GANFBaseModel(nn.Module):
         else:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             self.to(device=self.device)
+            torch.cuda.manual_seed(10)
+
+        random.seed(10)
+        np.random.seed(10)
+        torch.manual_seed(10)
 
         #Reducing dimensionality 
         self.rnn = nn.LSTM(input_size=input_size,hidden_size=hidden_size,batch_first=True, dropout=dropout, device=self.device)
@@ -128,19 +134,11 @@ class GANFBaseModel(nn.Module):
     @property
     def name(self):
         return "GANFBaseModel " + "+".join([f[0] for f in self.features])
-    
-    def create_dataLoader(self, X, batch_size = None, window_size = 12):
-        if batch_size is None:
-            batch_size = 32
+      
+    @property
+    def adjacent_matrix(self):
+        return self.adjacent_matrix
 
-        X = X.reshape((X.shape[0]*X.shape[2], X.shape[1]))
-        X = torch.tensor(X)
-        X = pd.DataFrame(X)
-        X = X.iloc[:int(len(X))]
-        X_dataLoader = DataLoader(AudioData(X, window_size=window_size), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
-        return X_dataLoader
-
-        
     def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None):
         torch.cuda.empty_cache()
         gc.collect()
@@ -153,11 +151,12 @@ class GANFBaseModel(nn.Module):
         h_A_old = np.inf
         h_tol = float(1e-6)
 
-        X = self.create_dataLoader(X, batch_size)
+        X = self.__create_dataLoader(X, batch_size)
         adjacent_matrix = self.__init_adjacent_matrix(X.dataset.data)
         dimension = X.dataset.data.shape[1]
         
-        for _ in range(self.max_iteraction):
+        for j in range(self.max_iteraction):
+            print('iteraction ' + str(j+1) + ' of ' + str(self.max_iteraction))
 
             while self.rho < self.rho_max:
                 learning_rate = self.learning_rate #np.math.pow(0.1, epoch // 100)    
@@ -168,13 +167,13 @@ class GANFBaseModel(nn.Module):
                 for i in range(self.epochs):
                         loss_train = []
                         self.train()
-                        print('epoch ' + str(i) + ' of ' + str(self.epochs))
+                        print('epoch ' + str(i+1) + ' of ' + str(self.epochs))
 
                         for x in X:
                             x = x.to(self.device)
                             optimizer.zero_grad()
                             A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
-                            self.__treat_NaN(A_hat)
+                            self.__treat_NaN(A_hat) #A_hat = torch.nan_to_num(A_hat) #self.__treat_NaN(A_hat)
                             loss = -self.forward(x, A_hat)
                             h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - dimension
                             total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
@@ -202,26 +201,11 @@ class GANFBaseModel(nn.Module):
         self.adjacent_matrix = adjacent_matrix
         self.hidden_state = h
     
-    def __treat_NaN(self, matrix):
-        k = 0
-        j = 0
-        if matrix.isnan().any():
-            for k in range(len(matrix)):
-                for j in range(len(matrix[k])):
-                    if matrix[k][j].isnan():
-                        matrix[k][j] = 0
-
-    def __init_adjacent_matrix(self, X):
-        init = torch.zeros([X.shape[1], X.shape[1]])
-        init = xavier_uniform_(init).abs()
-        init = init.fill_diagonal_(0.0)
-        return torch.tensor(init, requires_grad=True)
-    
     def predict(self, X):
         return self.forward(X, self.adjacent_matrix)
 
     def score_samples(self, X):
-        X_dataLoader = self.create_dataLoader(X, window_size=1)
+        X_dataLoader = self.__create_dataLoader(X, window_size=1)
         result = []
         for x in X_dataLoader:
             x = x.to(self.device)
@@ -230,8 +214,16 @@ class GANFBaseModel(nn.Module):
     
     def forward(self, x, adjacent_matrix):
         return self.__test(x, adjacent_matrix).mean()
+        
+    def __create_dataLoader(self, X, batch_size = None, window_size = 12):
+        if batch_size is None:
+            batch_size = 32
+        X = self.__create_dataframe(X)
+        X_dataLoader = DataLoader(AudioData(X, window_size=window_size), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
+        return X_dataLoader
 
     def __test(self, x, adjacent_matrix):
+        adjacent_matrix = torch.nan_to_num(adjacent_matrix)
         self.gcn.to(self.device)
         # x: N X K X L X D 
         full_shape = x.shape
@@ -256,8 +248,52 @@ class GANFBaseModel(nn.Module):
 
         return log_prob
     
-    def get_adjacent_matrix(self):
-        return self.adjacent_matrix
+    def __create_dataframe(self, X):
+        X = self.__reshape(X)
+        X = pd.DataFrame(X)
+        X = X.reset_index()
+        X = X.rename(columns={"index":"channel"})
+        X["channel"] = pd.to_datetime(X["channel"], unit="s")
+        X = X.set_index("channel")
+        X = self.__normalize(X) 
+        X = X.sort_index()
+        X = X.iloc[:int(len(X))]
+        return X
+
+    def __normalize(self, X):
+        mean = X.values.flatten().mean()
+        std = X.values.flatten().std()
+        X = (X - mean)/std
+        return X
+
+    def __reshape(self, X):
+        L,D,N = X.shape
+        values = []
+        reshaped_X = []
+
+        for d in range(D):
+            for l in range(L):
+                values.append(X[l][d][:N])
+            reshaped_X.append(np.concatenate((values), axis=None))
+            values.clear()
+
+        X = np.array(reshaped_X)
+        return X.T
+    
+    def __treat_NaN(self, matrix):
+        k = 0
+        j = 0
+        if matrix.isnan().any():
+            for k in range(len(matrix)):
+                for j in range(len(matrix[k])):
+                    if matrix[k][j].isnan():
+                        matrix[k][j] = 0
+
+    def __init_adjacent_matrix(self, X):
+        init = torch.zeros([X.shape[1], X.shape[1]])
+        init = xavier_uniform_(init).abs()
+        init = init.fill_diagonal_(0.0)
+        return torch.tensor(init, requires_grad=True)
 
 FINAL_MODEL = GANFBaseModel()
 

@@ -1,24 +1,23 @@
 
-from sklearn.base import BaseEstimator, OutlierMixin
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import gc
 import random
-from functools import reduce
 import numpy as np
+import pandas as pd
 from sklearn.base import BaseEstimator, OutlierMixin
-
+from functools import reduce
+from sklearn.base import BaseEstimator, OutlierMixin
 from functools import reduce
 from torch.nn.init import xavier_uniform_
 from torch.nn.utils import clip_grad_value_
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import DataLoader
 from mtsa.models.GANF_components.NF import MAF, RealNVP
 from mtsa.models.GANF_components.audiodata import AudioData
 from mtsa.models.GANF_components.gnn import GNN
 from mtsa.utils import Wav2Array
 from sklearn.pipeline import Pipeline
-import pandas as pd
 from mtsa.utils import Wav2Array
 
 class GANFBaseModel(nn.Module):

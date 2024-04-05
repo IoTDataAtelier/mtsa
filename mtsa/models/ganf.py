@@ -39,7 +39,8 @@ class GANFBaseModel(nn.Module):
                   device = None
                   ):
         super().__init__()
-
+        self.min = 0
+        self.max = 0 
         self.adjacent_matrix = None
         self.rho = rho         
         self.rho_max = rho_max     
@@ -87,6 +88,7 @@ class GANFBaseModel(nn.Module):
 
     def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None):
         torch.cuda.empty_cache()
+        torch.autograd.set_detect_anomaly(True)
         gc.collect()
 
         if epochs is not None:
@@ -159,7 +161,12 @@ class GANFBaseModel(nn.Module):
         return torch.tensor(result).mean()
     
     def forward(self, x, adjacent_matrix):
-        return self.__test(x, adjacent_matrix).mean()
+        result = self.__test(x, adjacent_matrix).mean()
+        if self.max < result:
+            self.max = result
+        elif self.min > result:
+            self.min = result
+        return result
         
     def __create_dataLoader(self, X, batch_size = None, window_size = 12):
         if batch_size is None:

@@ -46,6 +46,44 @@ class Demux2Array(BaseEstimator, TransformerMixin):
         Xt = np.array(list(map(get_array, X)))
         return Xt
 
+class Tensor2Vec(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def fit(self, root, y=None, **fit_params):
+        return self
+
+    def transform(self, X, y=None, **fit_params):
+        L,D,N = X.shape
+        values = []
+        reshaped_X = []
+
+        for d in range(D):
+            for l in range(L):
+                values.append(X[l][d][:N])
+            reshaped_X.append(np.concatenate((values), axis=None))
+            values.clear()
+
+        X = np.array(reshaped_X)
+        return X.T
+
+from sklearn.preprocessing import MinMaxScaler
+class MinMaxScalerNormalization(BaseEstimator, TransformerMixin):
+    def __init__(self, 
+                 training_mode : bool = True
+                 ):
+        self.training_mode = training_mode
+        self.min_max_scaler = MinMaxScaler()
+
+    def fit(self, root, y=None, **fit_params):
+        return self
+
+    def transform(self, X, y=None, **fit_params):
+        if(self.training_mode): 
+            self.training_mode = False
+            return self.min_max_scaler.fit_transform(X)
+        
+        return self.min_max_scaler.transform(X)
 
 from sklearn.model_selection import BaseShuffleSplit
 from sklearn.utils.validation import check_random_state 

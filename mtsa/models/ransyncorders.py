@@ -6,11 +6,10 @@ from tensorflow.python.keras.models import Model, model_from_json
 from joblib import dump, load
 from scipy.signal import find_peaks
 from tensorflow.python.keras.layers import Input
-from mtsa.utils import Wav2Array
+from mtsa.utils import MinMaxScalerNormalization, Tensor2Vec, Wav2Array
 from spectrum import Periodogram
 from typing import List, Optional
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.base import BaseEstimator, OutlierMixin
 from mtsa.models.ransyncoders_components.rancoders import RANCoders
 from mtsa.models.ransyncoders_components.frequencycoder import FrequencyCoder
@@ -18,27 +17,24 @@ from mtsa.models.ransyncoders_components.sinusoidalcoder import SinusoidalCoder
 from mtsa.models.ransyncoders_components.exceptions.parametererror import ParameterError
 
 class RANSynCodersBase():
-    """ class for building, training, and testing rancoders models """
     def __init__(
             self,
-            # Rancoders inputs:
-            n_estimators: int = 10, #100
-            max_features: int = 4, #3
-            encoding_depth: int = 1, #2
-            latent_dim: int = 4, #2 
-            decoding_depth: int = 2,
-            activation: str = 'relu', #linear
-            output_activation: str = 'sigmoid', #linear
-            delta: float = 0.05,  # quantile bound for regression
-            # Syncrhonization inputs
-            synchronize: bool = True, #False
-            force_synchronization: bool = True,  # if synchronization is true but no significant frequencies found
-            min_periods: int = 3,  # if synchronize and forced, this is the minimum bound on cycles to look for in train set
-            freq_init: Optional[List[float]] = None,  # initial guess for the dominant angular frequency
-            max_freqs: int = 5,  # the number of sinusoidal signals to fit = 1
-            min_dist: int = 60,  # maximum distance for finding local maximums in the PSD
-            trainable_freq: bool = False,  # whether to make the frequency a variable during layer weight training
-            bias: bool = True,  # add intercept (vertical displacement)
+            n_estimators: int,
+            max_features: int,
+            encoding_depth: int,
+            latent_dim: int, 
+            decoding_depth: int,
+            activation: str,
+            output_activation: str,
+            delta: float,
+            synchronize: bool, 
+            force_synchronization: bool,
+            min_periods: int,
+            freq_init: Optional[List[float]],
+            max_freqs: int, 
+            min_dist: int,
+            trainable_freq: bool,
+            bias: bool,
     ):
         # Rancoders inputs:
         self.n_estimators = n_estimators
@@ -59,7 +55,6 @@ class RANSynCodersBase():
         self.min_dist = min_dist
         self.trainable_freq = trainable_freq
         self.bias = bias
-        self.x_scaler = MinMaxScaler()
         # set all variables to default to float32
         tf.keras.backend.set_floatx('float32')
 
@@ -96,54 +91,59 @@ class RANSynCodersBase():
             self, 
             x: np.ndarray, 
             t: np.ndarray,
-            epochs: int = 10, #old default value = 100
-            batch_size: int = 180, #old default value = 360
+            epochs: int = 5, #old default value = 100
+            batch_size: int = 4000, #old default value = 360
             shuffle: bool = True, 
             freq_warmup: int = 5,  # number of warmup epochs to prefit the frequency = 10 (old default value)
             sin_warmup: int = 5,  # number of warmup epochs to prefit the sinusoidal representation = 10 (old default value)
             pos_amp: bool = True,  # whether to constraint amplitudes to be +ve only
     ):
-        x_normalized = self.normalization_to_fit(x)
-        time_matrix = self.get_time_matrix(x_normalized)
+        t = self.get_time_matrix(x)
+
         # Prepare the training batches.
-        dataset = tf.data.Dataset.from_tensor_slices((x_normalized.astype(np.float32), time_matrix.astype(np.float32)))
+        with tf.device('/cpu:0'):
+            dataset = tf.data.Dataset.from_tensor_slices((x.astype(np.float32), t.astype(np.float32)))
+        
         if shuffle:
-            dataset = dataset.shuffle(buffer_size=x_normalized.shape[0]).batch(batch_size)
+            dataset = dataset.shuffle(buffer_size=x.shape[0]).batch(batch_size)
             
         # build and compile models (stage 1)
         if self.synchronize:
-            self.build(x_normalized.shape, initial_stage=True)
+            self.build(x.shape, initial_stage=True)
             if self.freq_init:
-                self.build(x_normalized.shape)
+                self.build(x.shape)
         else:
-            self.build(x_normalized.shape)
+            self.build(x.shape)
         
         # pretraining step 1:
+        
         if freq_warmup > 0 and self.synchronize and not self.freq_init:
-            for epoch in range(freq_warmup):
-                print("\nStart of frequency pre-train epoch %d" % (epoch,))
-                for step, (x_batch, t_batch) in enumerate(dataset):
-                    # Prefit the oscillation encoder
-                    with tf.GradientTape() as tape:
-                        # forward pass
-                        z, x_pred = self.freqcoder(x_batch)
+            with tf.device('/gpu:1'):
+                for epoch in range(freq_warmup):
+                    print("\nStart of frequency pre-train epoch %d" % (epoch,))
+                    for step, (x_batch, t_batch) in enumerate(dataset):
+                        # Prefit the oscillation encoder
+                        with tf.GradientTape() as tape:
+                            # forward pass
+                            z, x_pred = self.freqcoder(x_batch)
+                            
+                            # compute loss
+                            x_loss = self.freqcoder.loss(x_batch, x_pred)  # median loss
                         
-                        # compute loss
-                        x_loss = self.freqcoder.loss(x_batch, x_pred)  # median loss
-                    
-                    # retrieve gradients and update weights
-                    grads = tape.gradient(x_loss, self.freqcoder.trainable_weights)
-                    self.freqcoder.optimizer.apply_gradients(zip(grads, self.freqcoder.trainable_weights))
-                print("pre-reconstruction_loss:", tf.reduce_mean(x_loss).numpy(), end='\r')
+                        # retrieve gradients and update weights
+                        grads = tape.gradient(x_loss, self.freqcoder.trainable_weights)
+                        self.freqcoder.optimizer.apply_gradients(zip(grads, self.freqcoder.trainable_weights))
+                    print("pre-reconstruction_loss:", tf.reduce_mean(x_loss).numpy(), end='\r')
                 
             # estimate dominant frequency
-            z = self.freqcoder(x_normalized)[0].numpy().reshape(-1)  # must be done on full unshuffled series
-            z = ((z - z.min()) / (z.max() - z.min())) * (1 - -1) + -1  #  scale between -1 & 1
-            p = Periodogram(z, sampling=1)
-            p()
-            peak_idxs = find_peaks(p.psd, distance=self.min_dist, height=(0, np.inf))[0]
-            peak_order = p.psd[peak_idxs].argsort()[-self.min_periods-self.max_freqs:][::-1]  # max PSDs found
-            peak_idxs = peak_idxs[peak_order]
+            with tf.device('/cpu:0'):
+                z = self.freqcoder(x)[0].numpy().reshape(-1)  # must be done on full unshuffled series
+                z = ((z - z.min()) / (z.max() - z.min())) * (1 - -1) + -1  #  scale between -1 & 1
+                p = Periodogram(z, sampling=1)
+                p()
+                peak_idxs = find_peaks(p.psd, distance=self.min_dist, height=(0, np.inf))[0]
+                peak_order = p.psd[peak_idxs].argsort()[-self.min_periods-self.max_freqs:][::-1]  # max PSDs found
+                peak_idxs = peak_idxs[peak_order]
             if peak_idxs[0] < self.min_periods and not self.force_synchronization:
                 self.synchronize = False
                 print('no common oscillations found, switching off synchronization attempts')
@@ -157,25 +157,26 @@ class RANSynCodersBase():
                 print('no common oscillations found, switching off synchronization attempts')
             
             # build and compile models (stage 2)
-            self.build(x_normalized.shape)
+            self.build(x.shape)
         
         # pretraining step 2:
         if sin_warmup > 0 and self.synchronize:
-            for epoch in range(sin_warmup):
-                print("\nStart of sine representation pre-train epoch %d" % (epoch,))
-                for step, (x_batch, t_batch) in enumerate(dataset):
-                    # Train the sine wave encoder
-                    with tf.GradientTape() as tape:
-                        # forward pass
-                        s = self.sincoder(t_batch)
+            with tf.device('/gpu:1'):
+                for epoch in range(sin_warmup):
+                    print("\nStart of sine representation pre-train epoch %d" % (epoch,))
+                    for step, (x_batch, t_batch) in enumerate(dataset):
+                        # Train the sine wave encoder
+                        with tf.GradientTape() as tape:
+                            # forward pass
+                            s = self.sincoder(t_batch)
+                            
+                            # compute loss
+                            s_loss = self.sincoder.loss(x_batch, s)  # median loss
                         
-                        # compute loss
-                        s_loss = self.sincoder.loss(x_batch, s)  # median loss
-                    
-                    # retrieve gradients and update weights
-                    grads = tape.gradient(s_loss, self.sincoder.trainable_weights)
-                    self.sincoder.optimizer.apply_gradients(zip(grads, self.sincoder.trainable_weights))
-                print("sine_loss:", tf.reduce_mean(s_loss).numpy(), end='\r')
+                        # retrieve gradients and update weights
+                        grads = tape.gradient(s_loss, self.sincoder.trainable_weights)
+                        self.sincoder.optimizer.apply_gradients(zip(grads, self.sincoder.trainable_weights))
+                    print("sine_loss:", tf.reduce_mean(s_loss).numpy(), end='\r')
             
             # invert params (all amplitudes should either be -ve or +ve). Here we make them +ve
             if pos_amp:
@@ -202,89 +203,92 @@ class RANSynCodersBase():
                 K.set_value(self.sincoder.layers[1].disp, g_adj)
                 
         # train anomaly detector
-        for epoch in range(epochs):
-            print("\nStart of epoch %d" % (epoch,))
-            if self.synchronize:
-                for step, (x_batch, t_batch) in enumerate(dataset):
-                    # Train the sine wave encoder
-                    with tf.GradientTape() as tape:
-                        # forward pass
-                        s = self.sincoder(t_batch)
+        with tf.device('/gpu:1'):
+            for epoch in range(epochs):
+                print("\nStart of epoch %d" % (epoch,))
+                if self.synchronize:
+                    for step, (x_batch, t_batch) in enumerate(dataset):
+                        # Train the sine wave encoder
+                        with tf.GradientTape() as tape:
+                            # forward pass
+                            s = self.sincoder(t_batch)
+                            
+                            # compute loss
+                            s_loss = self.sincoder.loss(x_batch, s)  # median loss
                         
-                        # compute loss
-                        s_loss = self.sincoder.loss(x_batch, s)  # median loss
-                    
-                    # retrieve gradients and update weights
-                    grads = tape.gradient(s_loss, self.sincoder.trainable_weights)
-                    self.sincoder.optimizer.apply_gradients(zip(grads, self.sincoder.trainable_weights))
-                    
-                    # synchronize batch
-                    b = self.sincoder.layers[1].wb / self.sincoder.layers[1].freq  # phase shift(s)
-                    b_sync = b - tf.expand_dims(b[:,0], axis=-1)
-                    th_sync = tf.expand_dims(
-                        tf.expand_dims(self.sincoder.layers[1].freq, axis=0), axis=0
-                    ) * (tf.expand_dims(t_batch, axis=-1) + tf.expand_dims(b_sync, axis=0))  # synchronized angle
-                    e = (
-                        x_batch - s
-                    ) * tf.sin(
-                        self.sincoder.layers[1].freq[0] * ((np.pi / (2 * self.sincoder.layers[1].freq[0])) - b[:,0])
-                    )  # noise
-                    x_batch_sync = tf.reduce_sum(
-                        tf.expand_dims(self.sincoder.layers[1].amp, axis=0) * tf.sin(th_sync), axis=-1
-                    ) + self.sincoder.layers[1].disp + e
-                    
+                        # retrieve gradients and update weights
+                        grads = tape.gradient(s_loss, self.sincoder.trainable_weights)
+                        self.sincoder.optimizer.apply_gradients(zip(grads, self.sincoder.trainable_weights))
+                        
+                        # synchronize batch
+                        b = self.sincoder.layers[1].wb / self.sincoder.layers[1].freq  # phase shift(s)
+                        b_sync = b - tf.expand_dims(b[:,0], axis=-1)
+                        th_sync = tf.expand_dims(
+                            tf.expand_dims(self.sincoder.layers[1].freq, axis=0), axis=0
+                        ) * (tf.expand_dims(t_batch, axis=-1) + tf.expand_dims(b_sync, axis=0))  # synchronized angle
+                        e = (
+                            x_batch - s
+                        ) * tf.sin(
+                            self.sincoder.layers[1].freq[0] * ((np.pi / (2 * self.sincoder.layers[1].freq[0])) - b[:,0])
+                        )  # noise
+                        x_batch_sync = tf.reduce_sum(
+                            tf.expand_dims(self.sincoder.layers[1].amp, axis=0) * tf.sin(th_sync), axis=-1
+                        ) + self.sincoder.layers[1].disp + e
+                        
+                        # train the rancoders
+                        with tf.GradientTape() as tape:
+                            # forward pass
+                            o_hi, o_lo = self.rancoders(x_batch_sync)
+                            
+                            # compute losses
+                            o_hi_loss = self.rancoders.loss[0](
+                                tf.tile(tf.expand_dims(x_batch_sync, axis=0), (self.n_estimators, 1, 1)), o_hi
+                            )
+                            o_lo_loss = self.rancoders.loss[1](
+                                tf.tile(tf.expand_dims(x_batch_sync, axis=0), (self.n_estimators, 1, 1)), o_lo
+                            )
+                            o_loss = o_hi_loss + o_lo_loss
+
+                        # retrieve gradients and update weights
+                        grads = tape.gradient(o_loss, self.rancoders.trainable_weights)
+                        self.rancoders.optimizer.apply_gradients(zip(grads, self.rancoders.trainable_weights))
+                    print(
+                        "sine_loss:", tf.reduce_mean(s_loss).numpy(), 
+                        "upper_bound_loss:", tf.reduce_mean(o_hi_loss).numpy(), 
+                        "lower_bound_loss:", tf.reduce_mean(o_lo_loss).numpy(), 
+                        end='\r'
+                    )
+                else:
+                    for step, (x_batch, t_batch) in enumerate(dataset):
                     # train the rancoders
-                    with tf.GradientTape() as tape:
-                        # forward pass
-                        o_hi, o_lo = self.rancoders(x_batch_sync)
-                        
-                        # compute losses
-                        o_hi_loss = self.rancoders.loss[0](
-                            tf.tile(tf.expand_dims(x_batch_sync, axis=0), (self.n_estimators, 1, 1)), o_hi
-                        )
-                        o_lo_loss = self.rancoders.loss[1](
-                            tf.tile(tf.expand_dims(x_batch_sync, axis=0), (self.n_estimators, 1, 1)), o_lo
-                        )
-                        o_loss = o_hi_loss + o_lo_loss
+                        with tf.GradientTape() as tape:
+                            # forward pass
+                            o_hi, o_lo = self.rancoders(x_batch)
+                            
+                            # compute losses
+                            o_hi_loss = self.rancoders.loss[0](
+                                tf.tile(tf.expand_dims(x_batch, axis=0), (self.n_estimators, 1, 1)), o_hi
+                            )
+                            o_lo_loss = self.rancoders.loss[1](
+                                tf.tile(tf.expand_dims(x_batch, axis=0), (self.n_estimators, 1, 1)), o_lo
+                            )
+                            o_loss = o_hi_loss + o_lo_loss
 
-                    # retrieve gradients and update weights
-                    grads = tape.gradient(o_loss, self.rancoders.trainable_weights)
-                    self.rancoders.optimizer.apply_gradients(zip(grads, self.rancoders.trainable_weights))
-                print(
-                    "sine_loss:", tf.reduce_mean(s_loss).numpy(), 
-                    "upper_bound_loss:", tf.reduce_mean(o_hi_loss).numpy(), 
-                    "lower_bound_loss:", tf.reduce_mean(o_lo_loss).numpy(), 
-                    end='\r'
-                )
-            else:
-                for step, (x_batch, t_batch) in enumerate(dataset):
-                   # train the rancoders
-                    with tf.GradientTape() as tape:
-                        # forward pass
-                        o_hi, o_lo = self.rancoders(x_batch)
-                        
-                        # compute losses
-                        o_hi_loss = self.rancoders.loss[0](
-                            tf.tile(tf.expand_dims(x_batch, axis=0), (self.n_estimators, 1, 1)), o_hi
-                        )
-                        o_lo_loss = self.rancoders.loss[1](
-                            tf.tile(tf.expand_dims(x_batch, axis=0), (self.n_estimators, 1, 1)), o_lo
-                        )
-                        o_loss = o_hi_loss + o_lo_loss
-
-                    # retrieve gradients and update weights
-                    grads = tape.gradient(o_loss, self.rancoders.trainable_weights)
-                    self.rancoders.optimizer.apply_gradients(zip(grads, self.rancoders.trainable_weights))
-                print(
-                    "upper_bound_loss:", tf.reduce_mean(o_hi_loss).numpy(), 
-                    "lower_bound_loss:", tf.reduce_mean(o_lo_loss).numpy(), 
-                    end='\r'
-                )
+                        # retrieve gradients and update weights
+                        grads = tape.gradient(o_loss, self.rancoders.trainable_weights)
+                        self.rancoders.optimizer.apply_gradients(zip(grads, self.rancoders.trainable_weights))
+                    print(
+                        "upper_bound_loss:", tf.reduce_mean(o_hi_loss).numpy(), 
+                        "lower_bound_loss:", tf.reduce_mean(o_lo_loss).numpy(), 
+                        end='\r'
+                    )
             
-    def predict(self, x: np.ndarray, batch_size: int = 1000, desync: bool = False):
+    def predict(self, x: np.ndarray, batch_size: int = 4000, desync: bool = False):
         t = self.get_time_matrix(x)
         # Prepare the training batches.
-        dataset = tf.data.Dataset.from_tensor_slices((x.astype(np.float32), t.astype(np.float32)))
+        with tf.device('/gpu:1'):
+            dataset = tf.data.Dataset.from_tensor_slices((x.astype(np.float32), t.astype(np.float32)))
+        
         dataset = dataset.batch(batch_size)
         batches = int(np.ceil(x.shape[0] / batch_size))
         
@@ -324,34 +328,16 @@ class RANSynCodersBase():
                 o_hi_i, o_lo_i = tf.transpose(o_hi_i, [1,0,2]).numpy(), tf.transpose(o_lo_i, [1,0,2]).numpy()
                 o_hi[step], o_lo[step]  = o_hi_i, o_lo_i
             return np.concatenate(o_hi, axis=0), np.concatenate(o_lo, axis=0)
-    
+
     def get_time_matrix(self, X):
         #each line represents an instant of time in each time series
         row_indices = np.arange(len(X), dtype=np.float32).reshape(-1, 1)
         time_matrix = np.tile(row_indices, (1, X.shape[1]))
         return time_matrix
-    
-    def normalization_to_fit(self, X):
-        #Possible refactor is extract this preprocessing data to a pipeline class - TO DO
-        reshape_data = self.reshape_data(X)
-        x_scaled = self.x_scaler.fit_transform(reshape_data)
-        return x_scaled
-    
-    def normalization_to_predict(self, X):
-        #Possible refactor is extract this preprocessing data to a pipeline class - TO DO
-        reshape_data = self.reshape_data(X)
-        x_scaled = self.x_scaler.transform(reshape_data)
-        return x_scaled
-
-    def reshape_data(self, X : np.ndarray):
-        x_redimensionaded = X.reshape((X.shape[0]*X.shape[2], X.shape[1]))
-        x_fillna = np.nan_to_num(x_redimensionaded)
-        return x_fillna
 
     def score_samples(self, X):
-        x_scaled = self.normalization_to_predict(X)
-        sins, synched, upper, lower = self.predict(x_scaled)
-        synched_tiles = np.tile(synched.reshape(synched.shape[0], 1, synched.shape[1]), (1, 10, 1))
+        sins, synched, upper, lower = self.predict(X)
+        synched_tiles = np.tile(synched.reshape(synched.shape[0], 1, synched.shape[1]), (1, 5, 1))
         result = np.where((synched_tiles < lower) | (synched_tiles > upper), 1, 0)
         return np.mean(result)
 
@@ -400,7 +386,6 @@ class RANSynCodersBase():
         else:
             raise ParameterError('synchronize', 'parameter not set correctly for this method')
         
-        
     def get_config(self):
         config = {
             "n_estimators": self.n_estimators,
@@ -427,19 +412,52 @@ def quantile_loss(q, y, f):
     e = (y - f)
     return K.mean(K.maximum(q*e, (q-1)*e), axis=-1)
 
-FINAL_MODEL = RANSynCodersBase()
 
 class RANSynCoders(BaseEstimator, OutlierMixin):
     def __init__(self, 
-                 final_model = FINAL_MODEL, 
-                 sampling_rate = None,
+                 n_estimators: int = 5, 
+                 max_features: int = 5, 
+                 encoding_depth: int = 1, 
+                 latent_dim: int = 1,  
+                 decoding_depth: int = 2,
+                 activation: str = 'relu', 
+                 output_activation: str = 'sigmoid', 
+                 delta: float = 0.05,  # quantile bound for regression
+                 # Syncrhonization inputs
+                 synchronize: bool = True, #False
+                 force_synchronization: bool = True,  # if synchronization is true but no significant frequencies found
+                 min_periods: int = 3,  # if synchronize and forced, this is the minimum bound on cycles to look for in train set
+                 freq_init: Optional[List[float]] = None,  # initial guess for the dominant angular frequency
+                 max_freqs: int = 5,  # the number of sinusoidal signals to fit = 1
+                 min_dist: int = 60,  # maximum distance for finding local maximums in the PSD
+                 trainable_freq: bool = False,  # whether to make the frequency a variable during layer weight training
+                 bias: bool = True,  # add intercept (vertical displacement)
+                 sampling_rate = 16000,
                  mono: bool = True,
                 ) -> None:
-        super().__init__()
-        self.sampling_rate = sampling_rate
-        self.mono = mono
-        self.final_model = final_model
-        self.model = self.build_model()
+            super().__init__()
+            # Rancoders inputs:
+            self.n_estimators = n_estimators
+            self.max_features = max_features
+            self.encoding_depth = encoding_depth
+            self.latent_dim = latent_dim
+            self.decoding_depth = decoding_depth
+            self.activation = activation
+            self.output_activation = output_activation
+            self.delta = delta
+        
+            # Syncrhonization inputs
+            self.synchronize = synchronize
+            self.force_synchronization = force_synchronization
+            self.min_periods = min_periods
+            self.freq_init = freq_init  # in radians (angular frequency)
+            self.max_freqs = max_freqs
+            self.min_dist = min_dist
+            self.trainable_freq = trainable_freq
+            self.bias = bias
+            self.sampling_rate = sampling_rate
+            self.mono = mono
+            self.model = self.build_model()
 
     #@property
     def name(self):
@@ -459,14 +477,39 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
                     [[x] for x in X])
                 )
             )
+    
+    def get_final_model(self):
+        return RANSynCodersBase(
+            n_estimators = self.n_estimators, 
+            max_features = self.max_features, 
+            encoding_depth = self.encoding_depth, 
+            latent_dim = self.latent_dim, 
+            decoding_depth = self.decoding_depth, 
+            activation = self.activation,
+            output_activation = self.output_activation,
+            delta = self.delta,
+            synchronize = self.synchronize,
+            force_synchronization = self.force_synchronization,
+            min_periods = self.min_periods,  
+            freq_init = self.freq_init,  
+            max_freqs = self.max_freqs,  
+            min_dist = self.min_dist, 
+            trainable_freq = self.trainable_freq,  
+            bias = self.bias
+        )
         
     def build_model(self):
         wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=self.mono)
-        
+        preprocessing_data =  Tensor2Vec()
+        min_max_scaler = MinMaxScalerNormalization()
+        final_model = self.get_final_model()
+
         model = Pipeline(
             steps=[
                 ("wav2array", wav2array),
-                ("final_model", self.final_model),
+                ("preprocessing_data", preprocessing_data),
+                ("min_max_scaler", min_max_scaler),
+                ("final_model", final_model),
                 ]
             )
         

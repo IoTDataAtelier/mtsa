@@ -1,4 +1,5 @@
 
+#nao
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
@@ -55,29 +56,22 @@ class GANFBaseModel(nn.Module):
             self.device = device
         else:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            self.to(device=self.device)
-            torch.cuda.manual_seed(10)
-
-        random.seed(10)
-        np.random.seed(10)
-        torch.manual_seed(10)
 
         #Reducing dimensionality 
         self.rnn = nn.LSTM(input_size=input_size,hidden_size=hidden_size,batch_first=True, dropout=dropout, device=self.device)
 
         # Graph Neural Networks model
         self.gcn = GNN(input_size=hidden_size, hidden_size=hidden_size) 
-        self.gcn.to(self.device)
 
         #probability density estimation
         if model=="MAF":
             #Masked auto regressive flow
             self.nf = MAF(n_blocks, input_size, hidden_size, n_hidden, cond_label_size=hidden_size, batch_norm=batch_norm,activation='tanh')
-            self.nf.to(self.device)
         else:
             #real-valued non-volume preserving (real NVP)
             self.nf = RealNVP(n_blocks, input_size, hidden_size, n_hidden, cond_label_size=hidden_size, batch_norm=batch_norm)
-            self.nf.to(self.device)
+
+        self.to(device=self.device)
 
     @property
     def name(self):
@@ -86,22 +80,26 @@ class GANFBaseModel(nn.Module):
     def get_adjacent_matrix(self):
         return self.adjacent_matrix
 
-    def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None):
-        torch.cuda.empty_cache()
+    def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None, learning_rate = None):
         torch.autograd.set_detect_anomaly(True)
-        gc.collect()
+
+        loss_best = 100
 
         if epochs is not None:
            self.epochs = epochs
         if max_iteraction is not None:
             self.max_iteraction =  max_iteraction
+        if learning_rate is not None:
+            self.learning_rate = learning_rate
 
         h_A_old = np.inf
         h_tol = float(1e-6)
 
-        X = self.__create_dataLoader(X, batch_size)
-        adjacent_matrix = self.__init_adjacent_matrix(X.dataset.data)
         dimension = X.dataset.data.shape[1]
+        X = self.__create_dataLoader(X, batch_size)
+        self.adjacent_matrix = self.__init_adjacent_matrix(X.dataset.data)
+
+        adjacent_matrix = self.adjacent_matrix
         
         for j in range(self.max_iteraction):
             print('iteraction ' + str(j+1) + ' of ' + str(self.max_iteraction))
@@ -112,28 +110,36 @@ class GANFBaseModel(nn.Module):
                     {'params': self.parameters(), 'weight_decay':self.weight_decay},
                     {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
 
-                for i in range(self.epochs):
-                        loss_train = []
-                        self.train()
-                        print('epoch ' + str(i+1) + ' of ' + str(self.epochs))
+                for epoch in range(self.epochs):
+                    loss_train = []
+                    self.train()
+                    
+                    print('epoch ' + str(epoch+1) + ' of ' + str(self.epochs))
 
-                        for x in X:
-                            x = x.to(self.device)
-                            optimizer.zero_grad()
-                            A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
-                            self.__treat_NaN(A_hat) #A_hat = torch.nan_to_num(A_hat) #self.__treat_NaN(A_hat)
-                            loss = -self.forward(x, A_hat)
-                            h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - dimension
-                            total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
-                            total_loss.backward()
-                            clip_grad_value_(self.parameters(), 1)
-                            optimizer.step()
-                            loss_train.append(loss.item())
-                            adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
-                            self.adjacent_matrix = adjacent_matrix
+                    for x in X:
+                        x = x.to(self.device)
+                        
+                        optimizer.zero_grad()
+                        A_hat = torch.divide(adjacent_matrix.T,adjacent_matrix.sum(dim=1).detach()).T
+                        loss = -self.forward(x, A_hat)
+                        h = torch.trace(torch.matrix_exp(A_hat*A_hat)) - dimension
+                        total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
+                        
+                        total_loss.backward()
+                        clip_grad_value_(self.parameters(), 1)
+                        optimizer.step()
+                        loss_train.append(loss.item())
+                        adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
+                    
+                    print('Epoch: ' + str(epoch) + ' | ' + 'log_loss_train_mean: ' + str(np.mean(loss_train)))
+
+                    if np.mean(loss_train) < loss_best:
+                        loss_best = np.mean(loss_train)
+                        self.adjacent_matrix = adjacent_matrix
 
                 del optimizer
                 torch.cuda.empty_cache()
+                gc.collect()
 
                 if h.item() > 0.5 * h_A_old:
                     self.rho *= 10
@@ -145,9 +151,6 @@ class GANFBaseModel(nn.Module):
 
             if h_A_old <= h_tol or self.rho >= self.rho_max:
                 break
-
-        self.adjacent_matrix = adjacent_matrix
-        self.hidden_state = h
     
     def predict(self, X):
         return self.forward(X, self.adjacent_matrix)
@@ -162,10 +165,6 @@ class GANFBaseModel(nn.Module):
     
     def forward(self, x, adjacent_matrix):
         result = self.__test(x, adjacent_matrix).mean()
-        if self.max < result:
-            self.max = result
-        elif self.min > result:
-            self.min = result
         return result
         
     def __create_dataLoader(self, X, batch_size = None, window_size = 12):
@@ -175,22 +174,19 @@ class GANFBaseModel(nn.Module):
         X_dataLoader = DataLoader(AudioData(X, window_size=window_size), batch_size=batch_size, shuffle=True, num_workers=0, persistent_workers=False) # Terei que fazer uma classe parecida com o traffic
         return X_dataLoader
 
-    def __test(self, x, adjacent_matrix):
-        adjacent_matrix = torch.nan_to_num(adjacent_matrix)
-        self.gcn.to(self.device)
+    def __test(self, x, A):
         # x: N X K X L X D 
         full_shape = x.shape
 
         # reshape: N*K, L, D
         x = x.reshape((x.shape[0]*x.shape[1], x.shape[2], x.shape[3]))
-        #x = torch.tensor(x.reshape(x.shape[0],1))
         h,_ = self.rnn(x)
 
         # resahpe: N, K, L, H
         h = h.reshape((full_shape[0], full_shape[1], h.shape[1], h.shape[2]))
-        h = h.to(self.device)
-        adjacent_matrix = adjacent_matrix.to(self.device)
-        h = self.gcn(h, adjacent_matrix)
+
+
+        h = self.gcn(h, A)
 
         # reshappe N*K*L,H
         h = h.reshape((-1,h.shape[3]))
@@ -210,7 +206,6 @@ class GANFBaseModel(nn.Module):
         X = X.set_index("channel")
         X = self.__normalize(X) 
         X = X.sort_index()
-        X = X.iloc[:int(len(X))]
         return X
 
     def __normalize(self, X):
@@ -232,21 +227,16 @@ class GANFBaseModel(nn.Module):
 
         X = np.array(reshaped_X)
         return X.T
-    
-    def __treat_NaN(self, matrix):
-        k = 0
-        j = 0
-        if matrix.isnan().any():
-            for k in range(len(matrix)):
-                for j in range(len(matrix[k])):
-                    if matrix[k][j].isnan():
-                        matrix[k][j] = 0
 
     def __init_adjacent_matrix(self, X):
+        torch.cuda.manual_seed(10)
+        random.seed(10)
+        np.random.seed(10)
+        torch.manual_seed(10)
         init = torch.zeros([X.shape[1], X.shape[1]])
         init = xavier_uniform_(init).abs()
         init = init.fill_diagonal_(0.0)
-        return torch.tensor(init, requires_grad=True)
+        return torch.tensor(init, requires_grad=True, device=self.device)
 
 FINAL_MODEL = GANFBaseModel()
 
@@ -267,11 +257,12 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
     def name(self):
         return "GANF " + "+".join([f[0] for f in self.features])
         
-    def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None):
+    def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None, learning_rate = None):
         return self.model.fit(X, y, 
                               final_model__batch_size=batch_size,
                               final_model__epochs=epochs,
-                              final_model__max_iteraction=max_iteraction,)
+                              final_model__max_iteraction=max_iteraction,
+                              final_model_learning_rate = learning_rate)
 
     def transform(self, X, y=None):
         l = list()

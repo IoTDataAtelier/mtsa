@@ -1,5 +1,3 @@
-
-#nao
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
@@ -92,7 +90,7 @@ class GANFBaseModel(nn.Module):
             self.max_iteraction =  max_iteraction
         if learning_rate is not None:
             self.learning_rate = learning_rate
-        if batch_size is not None:
+        if batch_size is None:
             batch_size = 32
 
         h_A_old = np.inf

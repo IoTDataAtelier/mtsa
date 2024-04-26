@@ -24,7 +24,7 @@ from functools import reduce
 
 
 
-FINAL_MODEL = LocalOutlierFactor()
+FINAL_MODEL = LocalOutlierFactor(novelty=True, contamination=0.05, n_neighbors=5)
 
 class MFCCLocalOutlierFactor(BaseEstimator, OutlierMixin):
     def __init__(self, 
@@ -42,7 +42,7 @@ class MFCCLocalOutlierFactor(BaseEstimator, OutlierMixin):
 
     @property
     def name(self):
-        return "MFCCMix " + "+".join([f[0] for f in self.features])
+        return "MFCCLocalOutlierFactor " + "+".join([f[0] for f in self.features])
         
     def fit(self, X, y=None):
         return self.model.fit(X, y)

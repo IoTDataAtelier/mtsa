@@ -19,14 +19,14 @@ from mtsa.utils import (
     Wav2Array,
 )
 
-from sklearn.ensemble import IsolationForest
+from sklearn.svm import OneClassSVM
 from functools import reduce
 
 
 
-FINAL_MODEL = IsolationForest()
+FINAL_MODEL = OneClassSVM(nu=0.05, gamma='auto')
 
-class MFCCIsolationForest(BaseEstimator, OutlierMixin):
+class MFCCOneClassSVM(BaseEstimator, OutlierMixin):
     def __init__(self, 
                  final_model=FINAL_MODEL, 
                  features=FEATURES,
@@ -42,7 +42,7 @@ class MFCCIsolationForest(BaseEstimator, OutlierMixin):
 
     @property
     def name(self):
-        return "MFCCMix " + "+".join([f[0] for f in self.features])
+        return "MFCCOneClassSVM " + "+".join([f[0] for f in self.features])
         
     def fit(self, X, y=None):
         return self.model.fit(X, y)

@@ -9,6 +9,7 @@ from tensorflow.python.keras.models import Model, model_from_json
 from joblib import dump, load
 from scipy.signal import find_peaks
 from tensorflow.python.keras.layers import Input
+from mtsa.features.mel import Array2Mfcc
 from mtsa.utils import Wav2Array
 from spectrum import Periodogram
 from typing import List, Optional
@@ -340,8 +341,13 @@ class RANSynCodersBase():
 
     def __calculate_time_serie_time_instatnt(self, X):
         X_length = X.shape[0]
-        total_time_in_seconds = X_length/self.sampling_rate
-        time_serie_time_instant = total_time_in_seconds/self.sampling_rate
+        
+        dividend = self.sampling_rate
+        if X_length < self.sampling_rate :
+            dividend = X_length
+            
+        total_time_in_seconds = X_length/dividend
+        time_serie_time_instant = total_time_in_seconds/dividend
         return total_time_in_seconds,time_serie_time_instant
 
     def __load_dataset_(self, X: np.ndarray, batch_size: int, training_step: bool = True):
@@ -605,11 +611,14 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
         
     def build_model(self):
         wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=self.mono)
+        array2mfcc = Array2Mfcc(sampling_rate=self.sampling_rate)
+        self.mono = False
         self.final_model = self.get_final_model()
 
         model = Pipeline(
             steps=[
                 ("wav2array", wav2array),
+                ("array2mfcc", array2mfcc),
                 ("final_model", self.final_model),
                 ]
             )

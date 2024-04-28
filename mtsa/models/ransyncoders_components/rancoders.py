@@ -29,7 +29,7 @@ class RANCoders(Layer):
         self.kwargs = kwargs
         
     def build(self, input_shape):
-        assert(input_shape[-1] > self.max_features)
+        assert(input_shape[-1] >= self.max_features)
         self.encoders = {
             'encoder_{}'.format(i): Encoder(
                 self.latent_dim, self.activation, depth=self.encoding_depth,

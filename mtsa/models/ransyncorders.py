@@ -38,7 +38,8 @@ class RANSynCodersBase():
             min_dist: int,
             trainable_freq: bool,
             bias: bool,
-            sampling_rate: int
+            sampling_rate: int,
+            mono: bool
     ):
         # Rancoders inputs:
         self.n_estimators = n_estimators
@@ -60,6 +61,7 @@ class RANSynCodersBase():
         self.trainable_freq = trainable_freq
         self.bias = bias
         self.sampling_rate = sampling_rate
+        self.mono = mono
         self.min_max_scaler = MinMaxScaler()
         # set all variables to default to float32
         tf.keras.backend.set_floatx('float32')
@@ -345,14 +347,21 @@ class RANSynCodersBase():
     def __load_dataset_(self, X: np.ndarray, batch_size: int, training_step: bool = True):
         datasets = []
         x_2D = []
+        
         for x in X:
-            x_transpose = x.T[:self.sampling_rate]
-            x_normalized = self.__normalize_data(x_transpose, training_step)
+            
+            if(self.mono):
+                x = x.reshape(-1, 1)[:self.sampling_rate]
+            else:
+                x = x.T[:self.sampling_rate]
+    
+            x_normalized = self.__normalize_data(x, training_step)
             x_2D.append(x_normalized)
-            time_matrix = self.__get_time_matrix(x_transpose)
+            time_matrix = self.__get_time_matrix(x)
             with tf.device('/cpu:0'):
                 dataset = tf.data.Dataset.from_tensor_slices((x_normalized.astype(np.float32), time_matrix.astype(np.float32)))
-                datasets.append(dataset.batch(batch_size))      
+                datasets.append(dataset.batch(batch_size))  
+                    
         return datasets, x_2D
     
     def __get_experiment_dataframe(self):
@@ -590,7 +599,8 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
                                 min_dist = self.min_dist, 
                                 trainable_freq = self.trainable_freq,  
                                 bias = self.bias,
-                                sampling_rate = self.sampling_rate
+                                sampling_rate = self.sampling_rate,
+                                mono = self.mono,
                             )
         
     def build_model(self):

@@ -76,8 +76,7 @@ class RANSynCodersBase():
         tf.keras.backend.set_floatx('float32')
     
     #Region: Public methods      
-    def fit(
-            self, 
+    def fit(self, 
             X: np.ndarray,
             y, 
             timestamps_matrix: np.ndarray,
@@ -98,49 +97,12 @@ class RANSynCodersBase():
         else:
             self.__train_model_with_audio_data(X, learning_rate, epochs, freq_warmup, sin_warmup, pos_amp) 
              
-    def predict(self, x: np.ndarray, desync: bool = False):
+    def predict(self, X: np.ndarray, time_matrix: np.ndarray, desync: bool = False):
         
-        datasets, x = self.__load_dataset(x, False)
-        batches = int(np.ceil(x[0].shape[0] / self.batch_size))
+        if self.data_type is DataType.DEFAULT:
+            return self.__predict_with_default_data(X, time_matrix, desync)
         
-        for index, dataset in enumerate(datasets):
-            # loop through the batches of the dataset.
-            with tf.device('/gpu:1'):
-                if self.synchronize:
-                    s, x_sync, o_hi, o_lo = [None] * batches, [None] * batches, [None] * batches, [None] * batches
-                    for step, (x_batch, t_batch) in enumerate(dataset):
-                        s_i = self.sincoder(t_batch).numpy()
-                        b = self.sincoder.layers[1].wb / self.sincoder.layers[1].freq  # phase shift(s)
-                        b_sync = b - tf.expand_dims(b[:,0], axis=-1)
-                        th_sync = tf.expand_dims(
-                            tf.expand_dims(self.sincoder.layers[1].freq, axis=0), axis=0
-                        ) * (tf.expand_dims(t_batch, axis=-1) + tf.expand_dims(b_sync, axis=0))  # synchronized angle
-                        e = (
-                            x_batch - s_i
-                        ) * tf.sin(
-                            self.sincoder.layers[1].freq[0] * ((np.pi / (2 * self.sincoder.layers[1].freq[0])) - b[:,0])
-                        )  # noise
-                        x_sync_i = (tf.reduce_sum(
-                            tf.expand_dims(self.sincoder.layers[1].amp, axis=0) * tf.sin(th_sync), axis=-1
-                        ) + self.sincoder.layers[1].disp + e).numpy()  
-                        o_hi_i, o_lo_i = self.rancoders(x_sync_i)
-                        o_hi_i, o_lo_i = tf.transpose(o_hi_i, [1,0,2]).numpy(), tf.transpose(o_lo_i, [1,0,2]).numpy()
-                        if desync:
-                            o_hi_i, o_lo_i = self.predict_desynchronize(x_batch, x_sync_i, o_hi_i, o_lo_i)
-                        s[step], x_sync[step], o_hi[step], o_lo[step]  = s_i, x_sync_i, o_hi_i, o_lo_i
-                    return (
-                        np.concatenate(s, axis=0), 
-                        np.concatenate(x_sync, axis=0), 
-                        np.concatenate(o_hi, axis=0), 
-                        np.concatenate(o_lo, axis=0)
-                    )
-                else:
-                    o_hi, o_lo = [None] * batches, [None] * batches
-                    for step, (x_batch, t_batch) in enumerate(dataset):
-                        o_hi_i, o_lo_i = self.rancoders(x_batch)
-                        o_hi_i, o_lo_i = tf.transpose(o_hi_i, [1,0,2]).numpy(), tf.transpose(o_lo_i, [1,0,2]).numpy()
-                        o_hi[step], o_lo[step]  = o_hi_i, o_lo_i
-                    return np.concatenate(o_hi, axis=0), np.concatenate(o_lo, axis=0)
+        return self.__predict_with_audio_data(X, desync)
                 
     def build(self, input_shape, learning_rate: float, initial_stage: bool = False):
         x_in = Input(shape=(input_shape[-1],))  # created for either raw signal or synchronized signal
@@ -196,7 +158,7 @@ class RANSynCodersBase():
             raise ParameterError('synchronize', 'parameter not set correctly for this method')
     
     def score_samples(self, X):
-        sins, synched, upper, lower = self.predict(X)
+        sins, synched, upper, lower = self.predict(X, self.timestamps_matrix)
         synched_tiles = np.tile(synched.reshape(synched.shape[0], 1, synched.shape[1]), (1, self.n_estimators, 1))
         result = np.where((synched_tiles < lower) | (synched_tiles > upper), 1, 0)
         
@@ -537,53 +499,14 @@ class RANSynCodersBase():
         datasets, X = self.__load_dataset(X, False)
         batches = int(np.ceil(X[0].shape[0] / self.batch_size))
         
-        for index, dataset in enumerate(datasets):
-            self.__model_predict(dataset, batches, desync)
+        return self.__model_predict(datasets[0], batches, desync)
             
-    def __predict_with_default_data(self, X: np.ndarray, time_matrix: np.ndarray, desync, batch_size: int):
-       # Prepare the training batches.
+    def __predict_with_default_data(self, X: np.ndarray, time_matrix: np.ndarray, desync):
         with tf.device('/gpu:1'):
             dataset = tf.data.Dataset.from_tensor_slices((X.astype(np.float32), time_matrix.astype(np.float32)))
-            dataset = dataset.batch(batch_size*10)
-            batches = int(np.ceil(X.shape[0] / batch_size*10))
-        
-        # loop through the batches of the dataset.
-        with tf.device('/gpu:1'):
-            if self.synchronize:
-                s, x_sync, o_hi, o_lo = [None] * batches, [None] * batches, [None] * batches, [None] * batches
-                for step, (x_batch, t_batch) in enumerate(dataset):
-                    s_i = self.sincoder(t_batch).numpy()
-                    b = self.sincoder.layers[1].wb / self.sincoder.layers[1].freq  # phase shift(s)
-                    b_sync = b - tf.expand_dims(b[:,0], axis=-1)
-                    th_sync = tf.expand_dims(
-                        tf.expand_dims(self.sincoder.layers[1].freq, axis=0), axis=0
-                    ) * (tf.expand_dims(t_batch, axis=-1) + tf.expand_dims(b_sync, axis=0))  # synchronized angle
-                    e = (
-                        x_batch - s_i
-                    ) * tf.sin(
-                        self.sincoder.layers[1].freq[0] * ((np.pi / (2 * self.sincoder.layers[1].freq[0])) - b[:,0])
-                    )  # noise
-                    x_sync_i = (tf.reduce_sum(
-                        tf.expand_dims(self.sincoder.layers[1].amp, axis=0) * tf.sin(th_sync), axis=-1
-                    ) + self.sincoder.layers[1].disp + e).numpy()  
-                    o_hi_i, o_lo_i = self.rancoders(x_sync_i)
-                    o_hi_i, o_lo_i = tf.transpose(o_hi_i, [1,0,2]).numpy(), tf.transpose(o_lo_i, [1,0,2]).numpy()
-                    if desync:
-                        o_hi_i, o_lo_i = self.predict_desynchronize(x_batch, x_sync_i, o_hi_i, o_lo_i)
-                    s[step], x_sync[step], o_hi[step], o_lo[step]  = s_i, x_sync_i, o_hi_i, o_lo_i
-                return (
-                    np.concatenate(s, axis=0), 
-                    np.concatenate(x_sync, axis=0), 
-                    np.concatenate(o_hi, axis=0), 
-                    np.concatenate(o_lo, axis=0)
-                )
-            else:
-                o_hi, o_lo = [None] * batches, [None] * batches
-                for step, (x_batch, t_batch) in enumerate(dataset):
-                    o_hi_i, o_lo_i = self.rancoders(x_batch)
-                    o_hi_i, o_lo_i = tf.transpose(o_hi_i, [1,0,2]).numpy(), tf.transpose(o_lo_i, [1,0,2]).numpy()
-                    o_hi[step], o_lo[step]  = o_hi_i, o_lo_i
-                return np.concatenate(o_hi, axis=0), np.concatenate(o_lo, axis=0)
+            dataset = dataset.batch(self.batch_size)
+            batches = int(np.ceil(X.shape[0] / self.batch_size))
+            return self.__model_predict(dataset, batches, desync)
            
     def __model_predict(self, dataset, batches, desync):
         with tf.device('/gpu:1'):
@@ -624,6 +547,8 @@ class RANSynCodersBase():
                 return np.concatenate(o_hi, axis=0), np.concatenate(o_lo, axis=0)
     #End region
     
+        
+           
 # Loss function
 def quantile_loss(q, y, f):
     e = (y - f)

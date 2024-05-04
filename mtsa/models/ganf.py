@@ -30,7 +30,6 @@ class GANFBaseModel(nn.Module):
                   dropout = 0.0,
                   model="MAF",
                   batch_norm=False,
-                  rho = 1.0,
                   rho_max = float(1e16),
                   max_iteraction = 2,
                   learning_rate = float(1e-3),
@@ -43,7 +42,6 @@ class GANFBaseModel(nn.Module):
         self.min = 0
         self.max = 0 
         self.adjacent_matrix = None
-        self.rho = rho         
         self.rho_max = rho_max     
         self.max_iteraction = max_iteraction    
         self.learning_rate = learning_rate          
@@ -55,7 +53,7 @@ class GANFBaseModel(nn.Module):
         if device != None: 
             self.device = device
         else:
-            self.device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         #Reducing dimensionality 
         self.rnn = nn.LSTM(input_size=input_size,hidden_size=hidden_size,batch_first=True, dropout=dropout, device=self.device)
@@ -85,14 +83,15 @@ class GANFBaseModel(nn.Module):
         random.seed(10)
         np.random.seed(10)
         torch.manual_seed(10)
-        epoch_nan = None #only for script experiment
-        epoch = 0
-        h = None
         torch.autograd.set_detect_anomaly(True)
-        self.isMonoData = mono
 
+        self.isMonoData = mono
         loss_best = 100
         self.isWaveData = isWaveData
+        h_A_old = np.inf
+        h_tol = float(1e-6)
+        rho = 1.0
+
         if epochs is not None:
            self.epochs = epochs
         if max_iteraction is not None:
@@ -102,120 +101,17 @@ class GANFBaseModel(nn.Module):
         if batch_size is None:
             batch_size = 32
 
-        h_A_old = np.inf
-        h_tol = float(1e-6)
-
         dimension = X.data.shape[1]
         self.adjacent_matrix = self.__init_adjacent_matrix(X.data)
 
         dataloaders = self.__create_dataLoader(torch.tensor(X), batch_size=batch_size, isMonoData = mono)
         adjacent_matrix = self.adjacent_matrix
 
-        self.__fitCore(loss_best, h_A_old, h_tol, dimension, dataloaders, adjacent_matrix)
+        self.__fitCore(loss_best, h_A_old, h_tol, dimension, dataloaders, adjacent_matrix, rho)
 
-    def __fitCore(self, loss_best, h_A_old, h_tol, dimension, dataloaders, adjacent_matrix):
-        for j in range(self.max_iteraction):
-            print('iteraction ' + str(j+1) + ' of ' + str(self.max_iteraction))
-
-            while self.rho < self.rho_max:
-                learning_rate = self.learning_rate #np.math.pow(0.1, epoch // 100)    
-                optimizer = torch.optim.Adam([
-                    {'params': self.parameters(), 'weight_decay':self.weight_decay},
-                    {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
-
-                for epoch in range(self.epochs):
-                    loss_train = []
-                    epoch += 1
-                    self.train()
-
-                    for dataloader in dataloaders:
-                        for x in dataloader:
-                            x = x.to(self.device)
-                            
-                            optimizer.zero_grad()
-                            loss = -self.forward(x, adjacent_matrix)
-                            h = torch.trace(torch.matrix_exp(adjacent_matrix*adjacent_matrix)) - dimension
-                            total_loss = loss + 0.5 * self.rho * h * h + self.alpha * h
-
-                            h.to(self.device)
-                            
-                            total_loss.backward()
-                            clip_grad_value_(self.parameters(), 1)
-                            optimizer.step()
-                            loss_train.append(loss.item())
-                            adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
-                            
-                            if np.mean(loss_train) < loss_best:
-                                loss_best = np.mean(loss_train)
-                                self.adjacent_matrix = adjacent_matrix
-
-                    print('Epoch: {}, train -log_prob: {:.2f}, h: {}'.format(epoch, np.mean(loss_train), h.item()))
-                    
-                del optimizer
-                torch.cuda.empty_cache()
-
-                if h.item() > 0.5 * h_A_old:
-                    self.rho *= 10
-                else:
-                    break
-
-            h_A_old = h.item()
-            self.alpha += self.rho*h.item()
-
-            if h_A_old <= h_tol or self.rho >= self.rho_max:
-                break
-
-    def add2DebugDataframe(self, batch_size, debug_dataframe, epoch_nan, loss_best, adjacent_matrix, epoch, loss_train, A_hat, A_hat_NaN, h, total_loss, loss_train_mean, adjacent_matrix_NaN):
-        debug_dataframe.loc[len(debug_dataframe)] = {'batch_size' : batch_size, 
-                                                                         'epoch_size' : self.epochs, 
-                                                                         'current_epoch' : epoch, 
-                                                                         'epoch_NaN' : epoch_nan, 
-                                                                         'learning_rate' : [self.learning_rate],
-                                                                         'A_hat' : A_hat.cpu().detach().numpy(), 
-                                                                         'Adjacent_Matrix' : adjacent_matrix.cpu().detach().numpy(),
-                                                                         'h' : h.cpu().detach().numpy(),
-                                                                         'loss_train' : loss_train, 
-                                                                         'loss_train_mean' : loss_train_mean,
-                                                                         'loss_best': loss_best,
-                                                                         'alpha':  self.alpha, 
-                                                                         'rho': self.rho,
-                                                                         'total_loss': total_loss.cpu().detach().numpy(),
-                                                                         'A_hat_NaN': A_hat_NaN.cpu().detach().numpy(),
-                                                                         'Adjacent_Matrix_NaN': adjacent_matrix_NaN.cpu().detach().numpy()}
-    
     def predict(self, X):
         return self.forward(X, self.adjacent_matrix)
-
-    def score_samples(self, X):
-        if self.isWaveData:
-            return self.__score_wave(X=X)
-        return self.__score_data(X=X)
-
-    def __score_data(self, X):
-        X = np.array(X)
-        X = X.reshape(X.shape[0], X.shape[1], 1, 1)
-        X = torch.tensor(X).float()
-        X = X.to(self.device)
-        result = self.predict(X=X)
-        return float(result)
     
-    def __score_wave(self, X):
-        dataloaders = self.__create_dataLoader(X, window_size=1, isMonoData = self.isMonoData)
-        result = []
-        for dataloader in dataloaders:
-            for x in dataloader:
-                x = x.to(self.device)
-                result.append(self.predict(X=x))
-        return torch.tensor(result).mean()
-       
-    def __create_dataLoader(self, X, batch_size = 32, window_size = 12, isMonoData = True):
-        X = self.__create_dataframe(X, isMonoData)
-        dataloaders = []
-        for x in X:
-            x_dataloader = DataLoader(AudioData(x, window_size=window_size), batch_size=batch_size, shuffle=False, num_workers=0, persistent_workers=False)
-            dataloaders.append(x_dataloader)
-        return dataloaders
-
     def forward(self, x, A):
         # x: N X K X L X D 
         full_shape = x.shape
@@ -238,6 +134,88 @@ class GANFBaseModel(nn.Module):
         log_prob = log_prob.mean(dim=1)
         log_prob_x = log_prob.mean()
         return log_prob_x
+
+    def score_samples(self, X):
+        if self.isWaveData:
+            return self.__score_wave_data(X=X)
+        return self.__score_discrete_data(X=X)
+
+    def __fitCore(self, loss_best, h_A_old, h_tol, dimension, dataloaders, adjacent_matrix, rho):
+        for j in range(self.max_iteraction):
+            print('iteraction ' + str(j+1) + ' of ' + str(self.max_iteraction))
+
+            while rho < self.rho_max:
+                learning_rate = self.learning_rate #np.math.pow(0.1, epoch // 100)    
+                optimizer = torch.optim.Adam([
+                    {'params': self.parameters(), 'weight_decay':self.weight_decay},
+                    {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
+
+                for epoch in range(self.epochs):
+                    loss_train = []
+                    epoch += 1
+                    self.train()
+
+                    for dataloader in dataloaders:
+                        for x in dataloader:
+                            x = x.to(self.device)
+                            
+                            optimizer.zero_grad()
+                            loss = -self.forward(x, adjacent_matrix)
+                            h = torch.trace(torch.matrix_exp(adjacent_matrix*adjacent_matrix)) - dimension
+                            total_loss = loss + 0.5 * rho * h * h + self.alpha * h
+
+                            h.to(self.device)
+                            
+                            total_loss.backward()
+                            clip_grad_value_(self.parameters(), 1)
+                            optimizer.step()
+                            loss_train.append(loss.item())
+                            adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
+                            
+                            if np.mean(loss_train) < loss_best:
+                                loss_best = np.mean(loss_train)
+                                self.adjacent_matrix = adjacent_matrix
+
+                    print('Epoch: {}, train -log_prob: {:.2f}, h: {}'.format(epoch, np.mean(loss_train), h.item()))
+                    
+                del optimizer
+                torch.cuda.empty_cache()
+
+                if h.item() > 0.5 * h_A_old:
+                    rho *= 10
+                else:
+                    break
+
+            h_A_old = h.item()
+            self.alpha += rho*h.item()
+
+            if h_A_old <= h_tol or rho >= self.rho_max:
+                break
+    
+    def __score_discrete_data(self, X):
+        X = np.array(X)
+        X = X.reshape(X.shape[0], X.shape[1], 1, 1)
+        X = torch.tensor(X).float()
+        X = X.to(self.device)
+        result = self.predict(X=X)
+        return float(result)
+    
+    def __score_wave_data(self, X):
+        dataloaders = self.__create_dataLoader(X, window_size=1, isMonoData = self.isMonoData)
+        result = []
+        for dataloader in dataloaders:
+            for x in dataloader:
+                x = x.to(self.device)
+                result.append(self.predict(X=x))
+        return torch.tensor(result).mean()
+       
+    def __create_dataLoader(self, X, batch_size = 32, window_size = 12, isMonoData = True):
+        X = self.__create_dataframe(X, isMonoData)
+        dataloaders = []
+        for x in X:
+            x_dataloader = DataLoader(AudioData(x, window_size=window_size), batch_size=batch_size, shuffle=False, num_workers=0, persistent_workers=False)
+            dataloaders.append(x_dataloader)
+        return dataloaders
     
     def __create_dataframe(self, X, isMonoData):
         if self.isWaveData and not isMonoData:
@@ -354,6 +332,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
                     [[x] for x in X])
                 )
             )
+    
     def score(self, X, Y):
         X = self.score_samples
         fpr, tpr, thresholds = metrics.roc_curve(Y, X)

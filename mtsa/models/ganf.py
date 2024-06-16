@@ -11,12 +11,9 @@ from mtsa.utils import Wav2Array
 from sklearn.pipeline import Pipeline
 from mtsa.utils import Wav2Array
 
-FINAL_MODEL = GANFBaseModel()
-
 class GANF(nn.Module, BaseEstimator, OutlierMixin):
 
     def __init__(self, 
-                 final_model=FINAL_MODEL, 
                  sampling_rate=None,
                  random_state = None,
                  isForWaveData = False,
@@ -33,7 +30,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.mono = mono
-        self.final_model = FINAL_MODEL
+        self.final_model = GANFBaseModel(index_CUDA_device=index_CUDA_device)
         self.use_array2mfcc = use_array2mfcc
         self.model = self._build_model()
 

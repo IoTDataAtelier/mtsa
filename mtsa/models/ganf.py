@@ -228,7 +228,6 @@ class GANFBaseModel(nn.Module):
                 x_df["channel"] = pd.to_datetime(x_df["channel"], unit="s")
                 x_df = x_df.set_index("channel")
                 x_df = self.__normalize(x_df) 
-                x_df = x_df.sort_index()
                 dataframes.append(x_df)
             return dataframes
         
@@ -240,7 +239,6 @@ class GANFBaseModel(nn.Module):
             X_df["channel"] = pd.to_datetime(X_df["channel"], unit="s")
             X_df = X_df.set_index("channel")
             X_df = self.__normalize(X_df) 
-            X_df = X_df.sort_index()
             return [X_df]
         
         X_df = pd.DataFrame(X)
@@ -249,7 +247,6 @@ class GANFBaseModel(nn.Module):
         X_df["channel"] = pd.to_datetime(X_df["channel"], unit="s")
         X_df = X_df.set_index("channel")
         X_df = self.__normalize(X_df) 
-        X_df = X_df.sort_index()
 
         return [X_df]
 

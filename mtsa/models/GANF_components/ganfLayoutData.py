@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
 
-class AudioData(Dataset):
+class GANFData(Dataset):
     def __init__(self, df, window_size=12, stride_size=1):
-        super(AudioData, self).__init__()
+        super(GANFData, self).__init__()
         self.df = df
         self.window_size = window_size
         self.stride_size = stride_size

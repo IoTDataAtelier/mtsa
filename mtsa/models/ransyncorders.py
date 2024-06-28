@@ -4,7 +4,7 @@ from mtsa.utils import Wav2Array
 from typing import List, Optional
 from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, OutlierMixin
-from mtsa.models.ransyncoders_components.ransyncoders_base import DataType, RANSynCodersBase
+from mtsa.models.ransyncoders_components.ransyncoders_base import RANSynCodersBase
 
 class RANSynCoders(BaseEstimator, OutlierMixin):
     def __init__(self, 
@@ -14,10 +14,10 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
                  latent_dim: int = 1,
                  decoding_depth: int = 2,
                  activation: str = 'relu',
-                 output_activation: str = 'sigmoid', 
+                 output_activation: str = 'sigmoid',
                  delta: float = 0.05,  # quantile bound for regression
                  # Syncrhonization inputs
-                 synchronize: bool = True, #False
+                 synchronize: bool = False, #False
                  force_synchronization: bool = True,  # if synchronization is true but no significant frequencies found
                  min_periods: int = 3,  # if synchronize and forced, this is the minimum bound on cycles to look for in train set
                  freq_init: Optional[List[float]] = None,  # initial guess for the dominant angular frequency
@@ -27,7 +27,9 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
                  bias: bool = True,  # add intercept (vertical displacement)
                  sampling_rate: int = 16000,
                  mono: bool = False,
-                 data_type: DataType = DataType.DEFAULT,
+                 is_acoustic_data: bool = False,
+                 normal_classifier: int = 0,
+                 abnormal_classifier: int = 1,
                 ) -> None:
             super().__init__()
             # Rancoders inputs:
@@ -51,7 +53,9 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
             self.bias = bias
             self.sampling_rate = sampling_rate
             self.mono = mono
-            self.data_type = data_type
+            self.is_acoustic_data = is_acoustic_data
+            self.normal_classifier = normal_classifier
+            self.abnormal_classifier = abnormal_classifier
             self.model = self.build_model()
 
     @property
@@ -59,12 +63,12 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
         return "RANSynCoder " + "+".join([f[0] for f in self.features])
         
     def fit(self, 
-            X, 
+            X,
             y = None, 
             timestamps_matrix: np.ndarray = None,
             batch_size: int = 180, 
             learning_rate: float = 0.001,
-            epochs: int = 5,
+            epochs: int = 10,
             freq_warmup: int = 5,  # number of warmup epochs to prefit the frequency
             sin_warmup: int = 5,  # number of warmup epochs to prefit the sinusoidal representation 
             pos_amp: bool = True,  # whether to constraint amplitudes to be +ve only
@@ -86,16 +90,16 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
         return self.model.predict(X)
 
     def score_samples(self, X):
-        if self.data_type is DataType.DEFAULT:
-            return self.model.score_samples(X)
-        
-        return np.array(
-            list(
-                map(
-                    self.model.score_samples, 
-                    [[x] for x in X])
+        if self.is_acoustic_data:    
+            return np.array(
+                list(
+                    map(
+                        self.model.score_samples, 
+                        [[x] for x in X])
+                    )
                 )
-            )
+            
+        return self.model.score_samples(X)
     
     def set_timestamps_matrix_to_predict(self, timestamps_matrix: np.ndarray):
         self.final_model.set_timestamps_matrix_to_predict(timestamps_matrix)
@@ -125,7 +129,9 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
                                 bias = self.bias,
                                 sampling_rate = self.sampling_rate,
                                 mono = self.mono,
-                                data_type = self.data_type
+                                is_acoustic_data = self.is_acoustic_data,
+                                normal_classifier = self.normal_classifier,
+                                abnormal_classifier = self.abnormal_classifier
                             )
         
     def build_model(self):
@@ -140,13 +146,9 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
        
         self.final_model = self.get_final_model()
         
-        if self.data_type is DataType.MFCC:
+        if self.is_acoustic_data:
             steps = [("wav2array", wav2array),
                      ("array2mfcc", array2mfcc),
-                     ("final_model", self.final_model)
-                    ]
-        elif self.data_type is DataType.AUDIO:
-            steps = [("wav2array", wav2array),
                      ("final_model", self.final_model)
                     ]
         else:

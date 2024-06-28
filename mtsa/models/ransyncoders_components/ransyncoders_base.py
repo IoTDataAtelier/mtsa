@@ -1,4 +1,3 @@
-from enum import Enum
 import os
 import numpy as np
 import pandas as pd
@@ -16,11 +15,6 @@ from mtsa.models.ransyncoders_components.rancoders import RANCoders
 from mtsa.models.ransyncoders_components.frequencycoder import FrequencyCoder
 from mtsa.models.ransyncoders_components.sinusoidalcoder import SinusoidalCoder
 from mtsa.models.ransyncoders_components.exceptions.parametererror import ParameterError
-
-class DataType(Enum):
-    DEFAULT = 0
-    AUDIO = 1
-    MFCC = 2
 
 class RANSynCodersBase():
     def __init__(
@@ -43,7 +37,9 @@ class RANSynCodersBase():
             bias: bool,
             sampling_rate: int,
             mono: bool,
-            data_type: DataType
+            is_acoustic_data: bool,
+            normal_classifier: int,
+            abnormal_classifier: int,
         ):
         # Rancoders inputs:
         self.n_estimators = n_estimators
@@ -66,7 +62,9 @@ class RANSynCodersBase():
         self.bias = bias
         self.sampling_rate = sampling_rate
         self.mono = mono
-        self.data_type = data_type
+        self.is_acoustic_data = is_acoustic_data
+        self.normal_classifier = normal_classifier
+        self.abnormal_classifier = abnormal_classifier
         self.min_max_scaler = MinMaxScaler()
         # set all variables to default to float32
         tf.keras.backend.set_floatx('float32')
@@ -88,20 +86,16 @@ class RANSynCodersBase():
         self.batch_size = batch_size
         self.experiment_dataframe = self.__get_experiment_dataframe()
 
-        #REMAKE: make a "if" to question if the data has tree dimensions
-        #REMAKE: make a flag to know if a audio data and delete the enum.
-        if self.data_type is DataType.DEFAULT:
-            self.__train_model_with_default_data(X, timestamps_matrix, learning_rate, epochs, freq_warmup, sin_warmup, pos_amp, shuffle)
-        else:
+        if self.is_acoustic_data:
             self.__train_model_with_audio_data(X, learning_rate, epochs, freq_warmup, sin_warmup, pos_amp) 
+        else:
+            self.__train_model_with_default_data(X, timestamps_matrix, learning_rate, epochs, freq_warmup, sin_warmup, pos_amp, shuffle)
              
     def predict(self, X: np.ndarray, time_matrix: np.ndarray, desync: bool = False):
-        #REMAKE: make a flag to know if a audio data and delete the enum.
-        if self.data_type is DataType.DEFAULT:
-            return self.__predict_with_default_data(X, time_matrix, desync)
-        
-        return self.__predict_with_audio_data(X, desync)
-                
+        if self.is_acoustic_data:
+            return self.__predict_with_audio_data(X, desync)
+        return self.__predict_with_default_data(X, time_matrix, desync)
+                       
     def build(self, input_shape, learning_rate: float, initial_stage: bool = False):
         x_in = Input(shape=(input_shape[-1],))  # created for either raw signal or synchronized signal
         optmizer = adam_v2.Adam(learning_rate = learning_rate)
@@ -158,11 +152,11 @@ class RANSynCodersBase():
     def score_samples(self, X):
         sins, synched, upper, lower = self.predict(X, self.timestamps_matrix)
         synched_tiles = np.tile(synched.reshape(synched.shape[0], 1, synched.shape[1]), (1, self.n_estimators, 1))
-        result = np.where((synched_tiles < lower) | (synched_tiles > upper), 0, 1)
+        result = np.where((synched_tiles < lower) | (synched_tiles > upper), self.abnormal_classifier, self.normal_classifier)
         
-        if self.data_type is DataType.DEFAULT:
-           return np.mean(np.mean(result, axis=1), axis=1)
-        return np.mean(result)
+        if self.is_acoustic_data:
+           return np.mean(result)
+        return np.mean(np.mean(result, axis=1), axis=1) 
     
     def set_timestamps_matrix_to_predict(self, timestamps_matrix: np.ndarray):
         self.timestamps_matrix = timestamps_matrix
@@ -232,7 +226,7 @@ class RANSynCodersBase():
         self.__train_anomaly_detector(learning_rate, epochs, dataset)
     
     def __train_anomaly_detector(self, learning_rate, epochs, dataset):
-        with tf.device('/gpu:0'):
+        with tf.device('/gpu:1'):
             for epoch in range(epochs):
                 print("\nStart of epoch %d" % (epoch,))
                 if self.synchronize:
@@ -348,7 +342,7 @@ class RANSynCodersBase():
 
     def __train_synchronization(self, sin_warmup, pos_amp, dataset):
         if sin_warmup > 0 and self.synchronize:
-            with tf.device('/gpu:0'):
+            with tf.device('/gpu:1'):
                 for epoch in range(sin_warmup):
                     print("\nStart of sine representation pre-train epoch %d" % (epoch,))
                     for step, (x_batch, t_batch) in enumerate(dataset):
@@ -391,7 +385,7 @@ class RANSynCodersBase():
 
     def __train_autoencoder(self, X, learning_rate, freq_warmup, dataset):
         if freq_warmup > 0 and self.synchronize and not self.freq_init:
-            with tf.device('/gpu:0'):
+            with tf.device('/gpu:1'):
                 for epoch in range(freq_warmup):
                     print("\nStart of frequency pre-train epoch %d" % (epoch,))
                     for step, (x_batch, t_batch) in enumerate(dataset):
@@ -471,7 +465,7 @@ class RANSynCodersBase():
         return datasets, x_2D
 
     def __transform_X(self, x):
-        if self.mono and (self.data_type is not DataType.MFCC):
+        if self.mono and (not self.is_acoustic_data):
             x = x.reshape(-1, 1)
         else:
             x = x.T
@@ -506,7 +500,7 @@ class RANSynCodersBase():
         return self.__model_predict(datasets[0], batches, desync)
             
     def __predict_with_default_data(self, X: np.ndarray, timestamps_matrix: np.ndarray, desync):
-        with tf.device('/gpu:0'):
+        with tf.device('/gpu:1'):
             if timestamps_matrix is None:
                 timestamps_matrix = self.__get_time_matrix(X=X)
                 
@@ -516,7 +510,7 @@ class RANSynCodersBase():
             return self.__model_predict(dataset, batches, desync)
            
     def __model_predict(self, dataset, batches, desync):
-        with tf.device('/gpu:0'):
+        with tf.device('/gpu:1'):
             if self.synchronize:
                 s, x_sync, o_hi, o_lo = [None] * batches, [None] * batches, [None] * batches, [None] * batches
                 for step, (x_batch, t_batch) in enumerate(dataset):
@@ -553,7 +547,7 @@ class RANSynCodersBase():
                     o_hi[step], o_lo[step]  = o_hi_i, o_lo_i
                 return np.concatenate(o_hi, axis=0), np.concatenate(o_lo, axis=0)
     #End region
-              
+    
 # Loss function
 def quantile_loss(q, y, f):
     e = (y - f)

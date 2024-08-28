@@ -11,4 +11,5 @@ class InputEmbedding(nn.Module):
         self.embedding = nn.Embedding(vocab_size, d_model)
         
     def forward(self, x):
+        #Multiplicação pela raiz de d_model para estabilização do gradiente (Page 5, 3.4)
         return self.embedding(x) * math.sqrt(self.d_model)

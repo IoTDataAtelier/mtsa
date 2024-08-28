@@ -8,6 +8,7 @@ class PositionalEncoding(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.seq_len = seq_len
+        #Droupout (Page 9)
         self.dropout = nn.Dropout(dropout)
         
         #Create a matyrix of shape (seq_len, d_model)
@@ -23,12 +24,13 @@ class PositionalEncoding(nn.Module):
         #Create a divisor term
             #Cria um tensor com os índices pares
             #Espaço logarítmico para estabilidade numérica
+            #a^b = exp (b*log(a))
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
         
         #Aplicar função de seno para posições pares
         #Aplicar função de cosseno para posições ímpares
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
+        pe[:, 0::2] = torch.sin(position * div_term) #Page 6
+        pe[:, 1::2] = torch.cos(position * div_term) #Page 6
         
         pe = pe.unsqueeze(0) #(1, seq_len, d_model)
         

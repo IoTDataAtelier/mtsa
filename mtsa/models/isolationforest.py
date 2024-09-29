@@ -54,6 +54,7 @@ class IForest(BaseEstimator, OutlierMixin):
                  final_model=None, 
                  features=FEATURES,
                  sampling_rate=None,
+                 #n_mfcc=20  
                  ) -> None:
         super().__init__()
         self.n_estimators = n_estimators
@@ -68,6 +69,7 @@ class IForest(BaseEstimator, OutlierMixin):
         self.sampling_rate = sampling_rate
         self.final_model = final_model
         self.features = features
+        #self.n_mfcc = n_mfcc
         
         self.execution_duration = None
         self.model_parameters_names = None
@@ -97,6 +99,7 @@ class IForest(BaseEstimator, OutlierMixin):
     def score(self, X, y=None):
         return self.model.score(X)
 
+    # Retorna a pontuação de anomalia para cada ponto de dados
     def score_samples(self, X):
         return self.model.score_samples(X=X)
     
@@ -154,9 +157,14 @@ class IForest(BaseEstimator, OutlierMixin):
     def _build_model(self):
         # Etapa 1: Converter áudio para array NumPy
         wav2array = Wav2Array(sampling_rate=self.sampling_rate)
-        # Etapa 2: Converter array de áudio para MFCCs (atualmente comentada)
+        
+        # Etapa 2: Converter array de áudio para MFCCs com n_mfcc especificado
         array2mfcc = Array2Mfcc(sampling_rate=self.sampling_rate)
-        # Configuração do modelo Isolation Forest com os parâmetros especificados
+        
+        # Etapa 3: Combinar as features existentes usando FeatureUnion (Retorno virá 2D)
+        features = FeatureUnion(self.features)
+
+        # Configuração do IsolationForest
         self.final_model = IsolationForest(
             n_estimators=self.n_estimators, 
             max_samples=self.max_samples, 
@@ -169,13 +177,15 @@ class IForest(BaseEstimator, OutlierMixin):
             warm_start=self.warm_start,
         )
         
+        # Construção do pipeline
         model = Pipeline(
             steps=[
                 ("wav2array", wav2array),
                 ("array2mfcc", array2mfcc),
+                ("features", features),
                 ("final_model", self.final_model),
-                ]
-            )
+            ]
+        )
         
         return model
 

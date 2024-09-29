@@ -1,0 +1,5 @@
+model_name,n_estimators,contamination,max_samples,max_features,training_time,auc_roc
+IsolationForest_50_estimators,50,0.1,256,1.0,74.35302186012268,0.6909323900215621
+IsolationForest_100_estimators,100,0.1,256,1.0,73.50275588035583,0.7178582116466263
+IsolationForest_200_estimators,200,0.1,256,1.0,74.64177799224854,0.7185641608029404
+IsolationForest_100_estimators_128_samples,100,0.1,128,1.0,76.79605007171631,0.7269664904351563

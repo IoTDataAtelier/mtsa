@@ -80,6 +80,7 @@ class Array2Mfcc(BaseEstimator, TransformerMixin):
     
     def __init__(self, sampling_rate):
         self.sampling_rate = sampling_rate
+        #self.n_mfcc = n_mfcc
 
     def fit(self, X, y=None, **fit_params):
         return self

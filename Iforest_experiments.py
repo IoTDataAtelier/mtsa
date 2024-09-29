@@ -34,12 +34,13 @@ def run_iforest_experiment():
     o desempenho do modelo. Os resultados dos experimentos são salvos em arquivos CSV para análise posterior.
     """
 
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    assert len(gpus) > 0, "Not enough GPU hardware devices available"
-    if gpus:
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-
+    
+    #gpus = tf.config.experimental.list_physical_devices('GPU')
+    #assert len(gpus) > 0, "Not enough GPU hardware devices available"
+    #if gpus:
+    #    for gpu in gpus:
+    #        tf.config.experimental.set_memory_growth(gpu, True)
+            
     # Definição dos caminhos de entrada para diferentes objetos e IDs no conjunto de dados MIMII
     path_input_fan_id_00 = os.path.join(os.getcwd(),  "..", "..", "MIMII", "fan", "id_00")
     path_input_fan_id_02 = os.path.join(os.getcwd(),  "..", "..", "MIMII", "fan", "id_02")

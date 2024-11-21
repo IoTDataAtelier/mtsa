@@ -165,10 +165,6 @@ class GANFBaseModel(nn.Module):
                             if np.mean(loss_train) < loss_best:
                                 loss_best = np.mean(loss_train)
                                 self.adjacent_matrix = adjacent_matrix
-                            
-                            if previous_total_loss is not None and torch.round(torch.sub(previous_total_loss,total_loss),decimals=4) == 0:
-                                print('round(previous_total_loss - total_loss, 4) == 0 >>>> True')
-                                break
 
                             previous_total_loss = total_loss
 

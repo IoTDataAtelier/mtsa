@@ -3,6 +3,7 @@ from .mfccmix import *
 from .ganf import *
 from .ransyncorders import *
 from .isolationforest import *
+from .gavae import *
 
 __ALL__ = [
     Hitachi,
@@ -10,6 +11,7 @@ __ALL__ = [
     MFCCMix,
     GANF,
     RANSynCoders,
-    IForest
+    IForest,
+    GAVAE
 ]
 

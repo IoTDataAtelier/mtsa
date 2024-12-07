@@ -53,8 +53,8 @@ class GAVAEBaseModel(nn.Module):
         self.gcn = GNN(input_size=hidden_size, hidden_size=hidden_size) 
 
         #probability density estimation
-        self.cvae =  CVAE(28*28, latent_size= 20, class_size=10).to(device)
-    
+        self.cvae = CVAE()
+        self.cvae.to(device=self.device)
         self.to(device=self.device)
 
     @property

@@ -1,16 +1,19 @@
-import torch.nn as nn
-import torch
 import random
+
 import numpy as np
 import pandas as pd
+import torch
+import torch.nn as nn
 from torch.nn.init import xavier_uniform_
 from torch.nn.utils import clip_grad_value_
 from torch.utils.data import DataLoader
+
 from mtsa.models.GANF_components.ganfLayoutData import GANFData
 from mtsa.models.GANF_components.gnn import GNN
 from mtsa.models.GANF_components.vae import CVAE
 
-class GAVAEBaseModel(nn.Module):
+
+class GACVAEBaseModel(nn.Module):
     def __init__(
         self,
         input_size=1,

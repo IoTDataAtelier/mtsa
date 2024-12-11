@@ -15,7 +15,7 @@ if module_path not in sys.path:
 from mtsa.metrics import calculate_aucroc
 from mtsa.models.ganf import GANF
 from mtsa.utils import files_train_test_split
-from mtsa.models.gavae import GAVAE
+from mtsa.mtsa.models.gacvae import GACVAE
 
 def run_ganf_experiment():
     batch_size_values = np.array([512])
@@ -52,7 +52,7 @@ def run_ganf_experiment():
 
                     x_train_fold, y_train_fold = X_train[train_index], Y_train[train_index]
 
-                    model_GANF = GAVAE(sampling_rate=sampling_rate_sound, index_CUDA_device=1)
+                    model_GANF = GACVAE(sampling_rate=sampling_rate_sound, index_CUDA_device=1)
                     model_GANF.fit(x_train_fold, y_train_fold, batch_size=int(batch_size), learning_rate=learning_rate, isWaveData=True)
 
                     auc = calculate_aucroc(model_GANF, X_test, Y_test)

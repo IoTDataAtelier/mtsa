@@ -7,7 +7,7 @@ from sklearn.base import BaseEstimator, OutlierMixin
 from sklearn.pipeline import Pipeline
 
 from mtsa.features.mel import Array2Mfcc
-from mtsa.mtsa.models.GANF_components.gacvaeBaseModel import GACVAEBaseModel
+from mtsa.models.GANF_components.gacvaeBaseModel import GACVAEBaseModel
 from mtsa.utils import Wav2Array
 
 

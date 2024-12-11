@@ -7,6 +7,7 @@ import torch.nn as nn
 from torch.nn.init import xavier_uniform_
 from torch.nn.utils import clip_grad_value_
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from mtsa.models.GANF_components.ganfLayoutData import GANFData
 from mtsa.models.GANF_components.gnn import GNN
@@ -151,8 +152,6 @@ class GACVAEBaseModel(nn.Module):
         self, loss_best, h_A_old, h_tol, dimension, dataloaders, adjacent_matrix, rho
     ):
         for j in range(self.max_iteraction):
-            print("iteraction " + str(j + 1) + " of " + str(self.max_iteraction))
-
             while rho < self.rho_max:
                 learning_rate = self.learning_rate  # np.math.pow(0.1, epoch // 100)
                 optimizer = torch.optim.Adam(
@@ -166,8 +165,8 @@ class GACVAEBaseModel(nn.Module):
                     lr=learning_rate,
                     weight_decay=0.0,
                 )
-
-                for epoch in range(self.epochs):
+                
+                for epoch in tqdm(range(self.epochs), desc=f'trainning epochs for {str(j)} iteraction.', unit='epochs'):
                     loss_train = []
                     epoch += 1
                     self.train()
@@ -281,4 +280,5 @@ class GACVAEBaseModel(nn.Module):
         init = torch.zeros([X.shape[1], X.shape[1]])
         init = xavier_uniform_(init).abs()
         init = init.fill_diagonal_(0.0)
-        return torch.tensor(init, requires_grad=True, device=self.device)
+        adjacentMatrix = torch.tensor(init, requires_grad=True, device=self.device)
+        return adjacentMatrix

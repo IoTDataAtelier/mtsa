@@ -37,6 +37,12 @@ pip install -r requirements.txt
 
 MTSA can be used to run anomaly detection models on acoustic data from industrial machines. Find an example [here](examples/MTSA.ipynb).
 
+if you have problems with google colab please try running it:
+
+```
+    %pip install --upgrade google-colab
+```
+
 ## Implemented Approaches
 
 MTSA includes the following anomaly detection approaches:

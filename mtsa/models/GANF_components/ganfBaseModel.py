@@ -132,6 +132,7 @@ class GANFBaseModel(nn.Module):
 
     def __fitCore(self, loss_best, h_A_old, h_tol, dimension, dataloaders, adjacent_matrix, rho):
         previous_total_loss = None
+        foward_count = 0
         for j in range(self.max_iteraction):
             print('iteraction ' + str(j+1) + ' of ' + str(self.max_iteraction))
 

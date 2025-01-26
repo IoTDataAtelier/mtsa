@@ -11,23 +11,24 @@ from mtsa.models.GANF_components.ganfLayoutData import GANFData
 from mtsa.models.GANF_components.gnn import GNN
 
 class GANFBaseModel(nn.Module):
-    def __init__ (self, 
-                  n_blocks = 6,
-                  input_size = 1,
-                  hidden_size = 32,
-                  n_hidden = 1,
-                  dropout = 0.0,
-                  model="MAF",
-                  batch_norm=False,
-                  rho_max = float(1e16),
-                  max_iteraction = 2,
-                  learning_rate = float(1e-3),
-                  alpha = 0.0,
-                  weight_decay = float(5e-4),
-                  epochs = 20,
-                  device = None,
-                  index_CUDA_device = '0'
-                  ):
+    def __init__(
+        self,
+        n_blocks=6,
+        input_size=1,
+        hidden_size=32,
+        n_hidden=1,
+        dropout=0.0,
+        model="MAF",
+        batch_norm=False,
+        rho_max=float(1e16),
+        max_iteraction=2,
+        learning_rate=float(1e-3),
+        alpha=0.0,
+        weight_decay=float(5e-4),
+        epochs=20,
+        device=None,
+        index_CUDA_device="1",
+    ):
         super().__init__()
         self.min = 0
         self.max = 0 
@@ -156,6 +157,33 @@ class GANFBaseModel(nn.Module):
 
                             h.to(self.device)
                             
+                            if epoch == 25 or epoch == 15:
+                                #For observer
+                                self.__proxy_notify_observers(
+                                    iteraction = j,
+                                    current_epoch=epoch,
+                                    batch_iteraction=foward_count,
+                                    adjacent_matrix= adjacent_matrix.clone(),
+                                    most_recent_loss = loss.clone(),
+                                    most_recent_total_loss= total_loss.clone(),
+                                    loss_train_mean = np.mean(loss_train),
+                                    loss_train=loss_train.copy(),
+                                    DAG_constraint_h = h.clone(),
+                                    alpha = self.alpha,
+                                    rho= rho,
+                                    h_A_old=h_A_old,
+                                    models_specs={
+                                        "learning_rate:": self.learning_rate,
+                                        "batch_size": 32,
+                                    },
+                                    AUC_ROC = -np.inf,
+                                    adj_matrix_name = "intermediate matrix"
+                                )
+                                
+                            if foward_count == 0:
+                                #For observer
+                                self.new_method(h_A_old, adjacent_matrix, rho, foward_count, j, epoch, loss_train, loss, h, total_loss)
+                            
                             total_loss.backward()
                             clip_grad_value_(self.parameters(), 1)
                             optimizer.step()
@@ -183,7 +211,93 @@ class GANFBaseModel(nn.Module):
 
             if h_A_old <= h_tol or rho >= self.rho_max:
                 break
-    
+            
+            self.__proxy_notify_observers(
+                                iteraction = j,
+                                current_epoch=epoch,
+                                batch_iteraction=foward_count,
+                                adjacent_matrix= adjacent_matrix.clone(),
+                                most_recent_loss = loss.clone(),
+                                most_recent_total_loss= total_loss.clone(),
+                                loss_train_mean = np.mean(loss_train),
+                                loss_train=loss_train.copy(),
+                                DAG_constraint_h = h.clone(),
+                                alpha = self.alpha,
+                                rho= rho,
+                                h_A_old=h_A_old,
+                                models_specs={
+                                    "learning_rate:": self.learning_rate,
+                                    "batch_size": 32,
+                                },
+                                AUC_ROC = -np.inf,
+                                adj_matrix_name = "final matrix"
+                            )
+
+    def new_method(self, h_A_old, adjacent_matrix, rho, foward_count, j, epoch, loss_train, loss, h, total_loss):
+        self.__proxy_notify_observers(
+                                    iteraction = j,
+                                    current_epoch=epoch,
+                                    batch_iteraction=foward_count,
+                                    adjacent_matrix= adjacent_matrix.clone(),
+                                    most_recent_loss = loss.clone(),
+                                    most_recent_total_loss= total_loss.clone(),
+                                    loss_train_mean = np.mean(loss_train),
+                                    loss_train=loss_train.copy(),
+                                    DAG_constraint_h = h.clone(),
+                                    alpha = self.alpha,
+                                    rho= rho,
+                                    h_A_old=h_A_old,
+                                    models_specs={
+                                        "learning_rate:": self.learning_rate,
+                                        "batch_size": 32,
+                                    },
+                                    AUC_ROC = -np.inf,
+                                    adj_matrix_name = "initial matrix"
+                                )
+            
+
+    def __proxy_notify_observers(self, **kwargs):
+        schema_avro = {
+            "type": "record",
+            "name": "GANF_Network",
+            "fields": [
+                {"name": "iteraction", "type": "int"},
+                {"name": "adj_matrix_name", "type": "string"},
+                {"name": "current_epoch", "type": "int"},
+                {"name": "batch_iteraction", "type": "int"},
+                {"name": "most_recent_loss", "type": "float"},
+                {"name": "most_recent_total_loss", "type": "float"},
+                {"name": "DAG_constraint_h", "type": "float"},
+                {"name": "alpha", "type": "float"},
+                {"name": "rho", "type": "float"},
+                {"name": "h_A_old", "type": "float"},
+                {"name": "loss_train_mean", "type": "float"},
+                {"name": "loss_train", "type": {"type":"array", "items":"double"}},
+                {"name": "adjacent_matrix", "type": {"type":"array", "items":{"type":"array", "items":"double"}}},
+                {"name": "models_specs", "type": {"type":"map", "values":"float"}},
+                {"name": "AUC_ROC", "type": "float"},
+            ],
+        }
+        data = [{
+            "iteraction": kwargs["iteraction"],         
+            "current_epoch": kwargs["current_epoch"],         
+            "batch_iteraction": kwargs["batch_iteraction"],         
+            "most_recent_loss": kwargs["most_recent_loss"],         
+            "most_recent_total_loss": kwargs["most_recent_total_loss"],   
+            "loss_train_mean": kwargs["loss_train_mean"],   
+            "loss_train": kwargs["loss_train"],               
+            "DAG_constraint_h": kwargs["DAG_constraint_h"],               
+            "alpha": kwargs["alpha"],               
+            "rho": kwargs["rho"],               
+            "h_A_old": kwargs["h_A_old"],               
+            "adjacent_matrix": kwargs["adjacent_matrix"].tolist(),    
+            "models_specs": kwargs["models_specs"],
+            "AUC_ROC": kwargs["AUC_ROC"],
+            "adj_matrix_name": kwargs["adj_matrix_name"],
+                       
+        }]
+        self.notify_observers(schema_avro=schema_avro, data=data)
+
     def __score_discrete_data(self, X):
         X = np.array(X)
         X = X.reshape(X.shape[0], X.shape[1], 1, 1)

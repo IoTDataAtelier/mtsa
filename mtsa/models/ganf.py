@@ -7,11 +7,12 @@ from sklearn.base import BaseEstimator, OutlierMixin
 from functools import reduce
 from mtsa.features.mel import Array2Mfcc
 from mtsa.models.GANF_components.ganfBaseModel import GANFBaseModel
+from mtsa.models.networkAnalysis.networkLearnerModel import NetworkLearnerModel
 from mtsa.utils import Wav2Array
 from sklearn.pipeline import Pipeline
 from mtsa.utils import Wav2Array
 
-class GANF(nn.Module, BaseEstimator, OutlierMixin):
+class GANF(nn.Module, BaseEstimator, OutlierMixin, NetworkLearnerModel):
 
     def __init__(self, 
                  sampling_rate=None,

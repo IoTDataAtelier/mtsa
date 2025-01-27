@@ -4,7 +4,7 @@ import json
 import networkx as nx
 import numpy as np
 
-class Observer():
+class NetworkLearnerObserver():
     def __init__(self, **kwargs) -> None:
         self.avro_file_name_with_path= kwargs["avro_path"]
         self.avro_file_name = ""

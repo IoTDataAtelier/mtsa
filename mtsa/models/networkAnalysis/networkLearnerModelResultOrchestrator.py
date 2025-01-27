@@ -1,7 +1,7 @@
 import os
 import fastavro
 
-class MetricNetworkResult:
+class NetworkLearnerModelResultOrchestrator:
     @staticmethod
     def save_result(network, metricResult, networkName, avro_file_name):
         schema = {

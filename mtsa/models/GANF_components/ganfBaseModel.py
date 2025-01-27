@@ -9,8 +9,9 @@ from torch.utils.data import DataLoader
 from mtsa.models.GANF_components.NF import MAF, RealNVP
 from mtsa.models.GANF_components.ganfLayoutData import GANFData
 from mtsa.models.GANF_components.gnn import GNN
+from mtsa.models.networkAnalysis import networkLearnerModel
 
-class GANFBaseModel(nn.Module):
+class GANFBaseModel(nn.Module, networkLearnerModel):
     def __init__(
         self,
         n_blocks=6,
@@ -109,35 +110,30 @@ class GANFBaseModel(nn.Module):
         return self.__score_discrete_data(X=X)
     
     def __forward(self, x, A):
-        # x: N X K X L X D 
         full_shape = x.shape
 
-        # reshape: N*K, L, D
         x = x.reshape((x.shape[0]*x.shape[1], x.shape[2], x.shape[3]))
         h,_ = self.rnn(x)
 
-        # resahpe: N, K, L, H
         h = h.reshape((full_shape[0], full_shape[1], h.shape[1], h.shape[2]))
 
         h = self.gcn(h, A)
 
-        # reshappe N*K*L,H
         h = h.reshape((-1,h.shape[3]))
         x = x.reshape((-1,full_shape[3]))
 
-        log_prob = self.nf.log_prob(x,h).reshape([full_shape[0],-1])#*full_shape[1]*full_shape[2]
+        log_prob = self.nf.log_prob(x,h).reshape([full_shape[0],-1])
         log_prob = log_prob.mean(dim=1)
         log_prob_x = log_prob.mean()
         return log_prob_x
 
     def __fitCore(self, loss_best, h_A_old, h_tol, dimension, dataloaders, adjacent_matrix, rho):
-        previous_total_loss = None
         foward_count = 0
         for j in range(self.max_iteraction):
             print('iteraction ' + str(j+1) + ' of ' + str(self.max_iteraction))
 
             while rho < self.rho_max:
-                learning_rate = self.learning_rate #np.math.pow(0.1, epoch // 100)    
+                learning_rate = self.learning_rate   
                 optimizer = torch.optim.Adam([
                     {'params': self.parameters(), 'weight_decay':self.weight_decay},
                     {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
@@ -158,32 +154,9 @@ class GANFBaseModel(nn.Module):
 
                             h.to(self.device)
                             
-                            if epoch == 25 or epoch == 15:
-                                #For observer
-                                self.__proxy_notify_observers(
-                                    iteraction = j,
-                                    current_epoch=epoch,
-                                    batch_iteraction=foward_count,
-                                    adjacent_matrix= adjacent_matrix.clone(),
-                                    most_recent_loss = loss.clone(),
-                                    most_recent_total_loss= total_loss.clone(),
-                                    loss_train_mean = np.mean(loss_train),
-                                    loss_train=loss_train.copy(),
-                                    DAG_constraint_h = h.clone(),
-                                    alpha = self.alpha,
-                                    rho= rho,
-                                    h_A_old=h_A_old,
-                                    models_specs={
-                                        "learning_rate:": self.learning_rate,
-                                        "batch_size": 32,
-                                    },
-                                    AUC_ROC = -np.inf,
-                                    adj_matrix_name = "intermediate matrix"
-                                )
-                                
-                            if foward_count == 0:
-                                #For observer
-                                self.new_method(h_A_old, adjacent_matrix, rho, foward_count, j, epoch, loss_train, loss, h, total_loss)
+                            if epoch == 25 or epoch == 15 or foward_count == 0:
+                                networkName = "first matrix" if foward_count == 0 else "intermediate matrix"
+                                super().notify_observers(adjacent_matrix, epoch, h, total_loss, networkName)
                             
                             total_loss.backward()
                             clip_grad_value_(self.parameters(), 1)
@@ -194,10 +167,6 @@ class GANFBaseModel(nn.Module):
                             if np.mean(loss_train) < loss_best:
                                 loss_best = np.mean(loss_train)
                                 self.adjacent_matrix = adjacent_matrix
-
-                            previous_total_loss = total_loss
-
-                    print('Epoch: {}, train -log_prob: {:.2f}, h: {}'.format(epoch, np.mean(loss_train), h.item()))
                     
                 del optimizer
                 torch.cuda.empty_cache()
@@ -213,91 +182,7 @@ class GANFBaseModel(nn.Module):
             if h_A_old <= h_tol or rho >= self.rho_max:
                 break
             
-            self.__proxy_notify_observers(
-                                iteraction = j,
-                                current_epoch=epoch,
-                                batch_iteraction=foward_count,
-                                adjacent_matrix= adjacent_matrix.clone(),
-                                most_recent_loss = loss.clone(),
-                                most_recent_total_loss= total_loss.clone(),
-                                loss_train_mean = np.mean(loss_train),
-                                loss_train=loss_train.copy(),
-                                DAG_constraint_h = h.clone(),
-                                alpha = self.alpha,
-                                rho= rho,
-                                h_A_old=h_A_old,
-                                models_specs={
-                                    "learning_rate:": self.learning_rate,
-                                    "batch_size": 32,
-                                },
-                                AUC_ROC = -np.inf,
-                                adj_matrix_name = "final matrix"
-                            )
-
-    def new_method(self, h_A_old, adjacent_matrix, rho, foward_count, j, epoch, loss_train, loss, h, total_loss):
-        self.__proxy_notify_observers(
-                                    iteraction = j,
-                                    current_epoch=epoch,
-                                    batch_iteraction=foward_count,
-                                    adjacent_matrix= adjacent_matrix.clone(),
-                                    most_recent_loss = loss.clone(),
-                                    most_recent_total_loss= total_loss.clone(),
-                                    loss_train_mean = np.mean(loss_train),
-                                    loss_train=loss_train.copy(),
-                                    DAG_constraint_h = h.clone(),
-                                    alpha = self.alpha,
-                                    rho= rho,
-                                    h_A_old=h_A_old,
-                                    models_specs={
-                                        "learning_rate:": self.learning_rate,
-                                        "batch_size": 32,
-                                    },
-                                    AUC_ROC = -np.inf,
-                                    adj_matrix_name = "initial matrix"
-                                )
-            
-
-    def __proxy_notify_observers(self, **kwargs):
-        schema_avro = {
-            "type": "record",
-            "name": "GANF_Network",
-            "fields": [
-                {"name": "iteraction", "type": "int"},
-                {"name": "adj_matrix_name", "type": "string"},
-                {"name": "current_epoch", "type": "int"},
-                {"name": "batch_iteraction", "type": "int"},
-                {"name": "most_recent_loss", "type": "float"},
-                {"name": "most_recent_total_loss", "type": "float"},
-                {"name": "DAG_constraint_h", "type": "float"},
-                {"name": "alpha", "type": "float"},
-                {"name": "rho", "type": "float"},
-                {"name": "h_A_old", "type": "float"},
-                {"name": "loss_train_mean", "type": "float"},
-                {"name": "loss_train", "type": {"type":"array", "items":"double"}},
-                {"name": "adjacent_matrix", "type": {"type":"array", "items":{"type":"array", "items":"double"}}},
-                {"name": "models_specs", "type": {"type":"map", "values":"float"}},
-                {"name": "AUC_ROC", "type": "float"},
-            ],
-        }
-        data = [{
-            "iteraction": kwargs["iteraction"],         
-            "current_epoch": kwargs["current_epoch"],         
-            "batch_iteraction": kwargs["batch_iteraction"],         
-            "most_recent_loss": kwargs["most_recent_loss"],         
-            "most_recent_total_loss": kwargs["most_recent_total_loss"],   
-            "loss_train_mean": kwargs["loss_train_mean"],   
-            "loss_train": kwargs["loss_train"],               
-            "DAG_constraint_h": kwargs["DAG_constraint_h"],               
-            "alpha": kwargs["alpha"],               
-            "rho": kwargs["rho"],               
-            "h_A_old": kwargs["h_A_old"],               
-            "adjacent_matrix": kwargs["adjacent_matrix"].tolist(),    
-            "models_specs": kwargs["models_specs"],
-            "AUC_ROC": kwargs["AUC_ROC"],
-            "adj_matrix_name": kwargs["adj_matrix_name"],
-                       
-        }]
-        self.notify_observers(schema_avro=schema_avro, data=data)
+            super().notify_observers(adjacent_matrix, epoch, h, total_loss, "final matrix")
 
     def __score_discrete_data(self, X):
         X = np.array(X)

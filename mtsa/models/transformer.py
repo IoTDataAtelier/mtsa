@@ -17,7 +17,8 @@ class Transformer(nn.Module):
     self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_ff, dropout) for _ in range(num_layers)]).to(device)
     self.decoder_layers = nn.ModuleList([DecoderLayer(d_model, nhead, d_ff, dropout) for _ in range(num_layers)]).to(device)
 
-    self.dropout = nn.Dropout(dropout).to(device)
+    self.dropout1 = nn.Dropout(dropout).to(device)
+    self.dropout2 = nn.Dropout(dropout).to(device)
 
   def generate_mask(self, tgt, device):
     seq_length = tgt.size(1)
@@ -32,8 +33,8 @@ class Transformer(nn.Module):
     src = self.positional_encoding(src)
     tgt = self.positional_encoding(tgt)
 
-    src = self.dropout(src)
-    tgt = self.dropout(tgt)
+    src = self.dropout1(src)
+    tgt = self.dropout2(tgt)
     tgt_m = self.generate_mask(tgt, self.device)
     enc_output = src
     for enc_layer in self.encoder_layers:

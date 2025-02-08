@@ -9,9 +9,9 @@ from torch.utils.data import DataLoader
 from mtsa.models.GANF_components.NF import MAF, RealNVP
 from mtsa.models.GANF_components.ganfLayoutData import GANFData
 from mtsa.models.GANF_components.gnn import GNN
-from mtsa.models.networkAnalysis import networkLearnerModel
+from mtsa.models.networkAnalysis.networkLearnerModel import NetworkLearnerModel
 
-class GANFBaseModel(nn.Module, networkLearnerModel):
+class GANFBaseModel(nn.Module, NetworkLearnerModel):
     def __init__(
         self,
         n_blocks=6,

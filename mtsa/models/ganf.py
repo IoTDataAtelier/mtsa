@@ -2,18 +2,15 @@ import torch.nn as nn
 import numpy as np
 
 from functools import reduce
-from functools import reduce
 
 from sklearn import metrics
-from sklearn.base import BaseEstimator, OutlierMixin
 from sklearn.base import BaseEstimator, OutlierMixin
 from sklearn.pipeline import Pipeline
 
 from mtsa.features.mel import Array2Mfcc
 from mtsa.models.GANF_components.ganfBaseModel import GANFBaseModel
+from mtsa.utils import Wav2Array
 from mtsa.models.networkAnalysis.networkLearnerModel import NetworkLearnerModel
-from mtsa.utils import Wav2Array
-from mtsa.utils import Wav2Array
 
 
 """

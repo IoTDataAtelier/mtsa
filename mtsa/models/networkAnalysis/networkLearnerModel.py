@@ -1,6 +1,7 @@
+from abc import ABC
 import numpy as np
 
-class NetworkLearnerModel:
+class NetworkLearnerModel(ABC):
     def __init__(self):
         self.observers = []
 

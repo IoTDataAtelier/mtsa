@@ -139,4 +139,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
     def set_adjacent_matrix(self, adjacent_matrix):
         if (self.final_model is not None):
             self.final_model.set_adjacent_matrix(adjacent_matrix)
+            
+    def get_random_adjacent_matrix(self):
+         return self.final_model.get_random_adjacent_matrix()
     

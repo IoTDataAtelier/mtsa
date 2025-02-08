@@ -252,3 +252,12 @@ class GANFBaseModel(NetworkLearnerModel, nn.Module):
         init = xavier_uniform_(init).abs()
         init = init.fill_diagonal_(0.0)
         return torch.tensor(init, requires_grad=True, device=self.device)
+    
+    def get_random_adjacent_matrix(self):
+        random_state = torch.get_rng_state()
+        torch.seed()
+        init = torch.zeros([20, 20])
+        init = xavier_uniform_(init).abs()
+        init = init.fill_diagonal_(0.0)
+        torch.set_rng_state(random_state)
+        return torch.tensor(init, requires_grad=True, device=self.device)

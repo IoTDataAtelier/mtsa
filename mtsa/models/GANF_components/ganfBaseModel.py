@@ -11,7 +11,7 @@ from mtsa.models.GANF_components.ganfLayoutData import GANFData
 from mtsa.models.GANF_components.gnn import GNN
 from mtsa.models.networkAnalysis.networkLearnerModel import NetworkLearnerModel
 
-class GANFBaseModel(nn.Module, NetworkLearnerModel):
+class GANFBaseModel(NetworkLearnerModel, nn.Module):
     def __init__(
         self,
         n_blocks=6,
@@ -28,7 +28,6 @@ class GANFBaseModel(nn.Module, NetworkLearnerModel):
         weight_decay=float(5e-4),
         epochs=20,
         device=None,
-        index_CUDA_device="1",
     ):
         super().__init__()
         self.min = 0
@@ -42,10 +41,10 @@ class GANFBaseModel(nn.Module, NetworkLearnerModel):
         self.epochs = epochs
         self.hidden_state = None
 
-        if device != None: 
+        if device is not None: 
             self.device = device
         else:
-            self.device = torch.device(f'cuda:{str(index_CUDA_device)}' if torch.cuda.is_available() else "cpu")
+            self.device = torch.device(f'cuda:{str(0)}' if torch.cuda.is_available() else "cpu")
 
         #Reducing dimensionality 
         self.rnn = nn.LSTM(input_size=input_size,hidden_size=hidden_size,batch_first=True, dropout=dropout, device=self.device)
@@ -69,6 +68,9 @@ class GANFBaseModel(nn.Module, NetworkLearnerModel):
       
     def get_adjacent_matrix(self):
         return self.adjacent_matrix
+    
+    def set_adjacent_matrix(self, adjacent_matrix):
+        self.adjacent_matrix = adjacent_matrix
 
     def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None, learning_rate = None, debug_dataframe= None, isWaveData = False, mono = None):
         torch.cuda.manual_seed(10)
@@ -92,7 +94,8 @@ class GANFBaseModel(nn.Module, NetworkLearnerModel):
             self.learning_rate = learning_rate
         if batch_size is None:
             batch_size = 32
-
+            
+        self.batch_size = batch_size
         dimension = X.data.shape[1]
         self.adjacent_matrix = self.__init_adjacent_matrix(X.data)
 
@@ -156,7 +159,7 @@ class GANFBaseModel(nn.Module, NetworkLearnerModel):
                             
                             if epoch == 25 or epoch == 15 or foward_count == 0:
                                 networkName = "first matrix" if foward_count == 0 else "intermediate matrix"
-                                super().notify_observers(adjacent_matrix, epoch, h, total_loss, networkName)
+                                super().notify_observers(adjacent_matrix, epoch, h, total_loss, networkName, learning_rate=learning_rate, batch_size=self.batch_size)
                             
                             total_loss.backward()
                             clip_grad_value_(self.parameters(), 1)
@@ -182,7 +185,7 @@ class GANFBaseModel(nn.Module, NetworkLearnerModel):
             if h_A_old <= h_tol or rho >= self.rho_max:
                 break
             
-            super().notify_observers(adjacent_matrix, epoch, h, total_loss, "final matrix")
+            super().notify_observers(adjacent_matrix, epoch, h, total_loss, "final matrix", learning_rate=learning_rate, batch_size=self.batch_size)
 
     def __score_discrete_data(self, X):
         X = np.array(X)

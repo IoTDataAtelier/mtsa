@@ -1,8 +1,8 @@
-from abc import ABC
 import numpy as np
 
-class NetworkLearnerModel(ABC):
+class NetworkLearnerModel:
     def __init__(self):
+        super().__init__()
         self.observers = []
 
     def attach_observer(self, observer):
@@ -30,8 +30,6 @@ class NetworkLearnerModel(ABC):
             observer.update(kwargs)
 
     def __proxy_notify_observers(self, **kwargs):
-        for observer in self.observers:
-            observer.update(kwargs)
         schema_avro = {
             "type": "record",
             "name": "GANF_Network",

@@ -37,7 +37,7 @@ def run_ganf_experiment(data_path, experiment_path,netPath,cuda_device,session_n
         mono=True,
         use_array2mfcc=True,
         isForWaveData=True,
-        index_CUDA_device=str(cuda_device)
+        device=str(cuda_device)
     )
     
     model_GANF.final_model.attach_observer(observer)

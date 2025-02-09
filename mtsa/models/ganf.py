@@ -142,4 +142,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
             
     def get_random_adjacent_matrix(self):
          return self.final_model.get_random_adjacent_matrix()
+     
+    def get_initial_adjacent_matrix(self):
+        return self.final_model.get_initial_adjacent_matrix()
     

@@ -71,6 +71,9 @@ class GANFBaseModel(NetworkLearnerModel, nn.Module):
     
     def set_adjacent_matrix(self, adjacent_matrix):
         self.adjacent_matrix = adjacent_matrix
+        
+    def get_initial_adjacent_matrix(self):
+        return self.initial_adjacent_matrix
 
     def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None, learning_rate = None, debug_dataframe= None, isWaveData = False, mono = None):
         torch.cuda.manual_seed(10)
@@ -98,6 +101,7 @@ class GANFBaseModel(NetworkLearnerModel, nn.Module):
         self.batch_size = batch_size
         dimension = X.data.shape[1]
         self.adjacent_matrix = self.__init_adjacent_matrix(X.data)
+        self.initial_adjacent_matrix = self.adjacent_matrix.detach().clone()
 
         dataloaders = self.__create_dataLoader(torch.tensor(X), batch_size=batch_size, isMonoData = mono)
         adjacent_matrix = self.adjacent_matrix
@@ -157,7 +161,7 @@ class GANFBaseModel(NetworkLearnerModel, nn.Module):
 
                             h.to(self.device)
                             
-                            if epoch == 25 or epoch == 15 or foward_count == 0:
+                            if epoch == int(.5 * self.epochs) or epoch == int(.3 * self.epochs) or foward_count == 0:
                                 networkName = "first matrix" if foward_count == 0 else "intermediate matrix"
                                 super().notify_observers(adjacent_matrix, epoch, h, total_loss, networkName, learning_rate=learning_rate, batch_size=self.batch_size)
                             
@@ -166,7 +170,7 @@ class GANFBaseModel(NetworkLearnerModel, nn.Module):
                             optimizer.step()
                             loss_train.append(loss.item())
                             adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
-                            
+                            foward_count += 1
                             if np.mean(loss_train) < loss_best:
                                 loss_best = np.mean(loss_train)
                                 self.adjacent_matrix = adjacent_matrix

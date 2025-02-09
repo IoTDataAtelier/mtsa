@@ -136,7 +136,7 @@ def run_iforest_experiment():
     X = np.array(X_train)
 
     # Configuração da validação cruzada K-Fold com 10 partições
-    k=10
+    k=5
     kf = KFold(n_splits=k, shuffle=True, random_state=1)
     kf.get_n_splits(X)
 
@@ -158,9 +158,7 @@ def run_iforest_experiment():
 
                 # Seleção das amostras de treino para o fold atual
                 X_train_KFold = X[train_index]
-                
-                
-                
+                              
                 # Treinamento do modelo com os dados de treino do fold
                 model_iforest.fit(X_train_KFold)
 

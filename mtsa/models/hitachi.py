@@ -7,6 +7,7 @@ from mtsa.utils import Demux2Array, Wav2Array
 from mtsa.features.mel import Array2MelSpec
 from sklearn.pipeline import Pipeline
 from functools import reduce
+from keras.optimizers import Adam
 
 class AutoEncoderMixin(Model):
     def score_samples(self, X):
@@ -36,6 +37,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
                  mono=False,
                  epochs=50,
                  batch_size=512,
+                 learning_rate=1e-3, 
                  shuffle=True,
                  validation_split=0.1,
                  verbose=0
@@ -50,6 +52,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
         self.mono = mono
         self.epochs=epochs
         self.batch_size=batch_size
+        self.learning_rate = learning_rate
         self.shuffle=shuffle
         self.validation_split=validation_split
         self.verbose=verbose
@@ -124,7 +127,8 @@ class Hitachi(BaseEstimator, OutlierMixin):
         h = Dense(64, activation="relu")(h)
         h = Dense(inputDim, activation=None)(h)
         final_model = AutoEncoderMixin(inputs=inputLayer, outputs=h)
-        final_model.compile(optimizer='adam', loss='mean_squared_error', jit_compile=True)
+        optimizer = Adam(learning_rate=self.learning_rate)
+        final_model.compile(optimizer=optimizer, loss='mean_squared_error', jit_compile=True)
         return final_model
     
     def _build_model(self):
@@ -174,7 +178,8 @@ class HitachiDCASE2020(Hitachi):
         h = Dense(128, activation="relu")(h)
         h = Dense(inputDim, activation="relu")(h)
         final_model = AutoEncoderMixin(inputs=inputLayer, outputs=h)
-        final_model.compile(optimizer='adam', loss='mean_squared_error')
+        optimizer = Adam(learning_rate=self.learning_rate)  
+        final_model.compile(optimizer=optimizer, loss='mean_squared_error')
         return final_model
     
 

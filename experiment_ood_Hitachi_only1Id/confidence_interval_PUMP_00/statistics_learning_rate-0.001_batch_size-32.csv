@@ -1,0 +1,2 @@
+machine_type,machine_id,learning_rate,batch_size,Mean_AUC_ROC,CI_lower,CI_upper
+pump,00,0.001,32,0.6761626491356221,0.6579823066309552,0.6913537862186511

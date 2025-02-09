@@ -1,0 +1,2 @@
+machine_type,machine_id,max_samples,n_estimators,Mean_AUC_ROC,CI_lower,CI_upper
+slider,00,128,2,0.9843461999747507,0.979401275091529,0.9886327681163994

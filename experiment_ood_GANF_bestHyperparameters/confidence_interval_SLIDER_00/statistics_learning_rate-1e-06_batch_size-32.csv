@@ -1,0 +1,2 @@
+machine_type,machine_id,learning_rate,batch_size,Mean_AUC_ROC,CI_lower,CI_upper
+slider,00,1e-06,32,0.9215432079282919,0.8376136220174221,0.9801366620376214

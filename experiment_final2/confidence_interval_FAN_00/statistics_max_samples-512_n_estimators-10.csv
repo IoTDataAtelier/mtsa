@@ -1,0 +1,2 @@
+machine_type,machine_id,max_samples,n_estimators,Mean_AUC_ROC,CI_lower,CI_upper
+fan,00,512,10,0.549516749271049,0.5273312848251422,0.5782366479725202

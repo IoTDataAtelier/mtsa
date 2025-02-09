@@ -51,7 +51,7 @@ class IForest(BaseEstimator, OutlierMixin):
                  random_state=None,
                  verbose=0,
                  warm_start=False,
-                 final_model=None, 
+                 #final_model=None, 
                  features=FEATURES,
                  sampling_rate=None,
                  #n_mfcc=20  
@@ -67,7 +67,7 @@ class IForest(BaseEstimator, OutlierMixin):
         self.verbose = verbose
         self.warm_start = warm_start
         self.sampling_rate = sampling_rate
-        self.final_model = final_model
+        #self.final_model = final_model
         self.features = features
         #self.n_mfcc = n_mfcc
         
@@ -95,6 +95,18 @@ class IForest(BaseEstimator, OutlierMixin):
         _predict = self.model.predict(X)
         _predict = np.where(_predict == -1, 0, 1)
         return _predict
+    
+    #def decision_function(self, X):
+        """
+        Retorna a pontuação de decisão para cada ponto de dados.
+        
+        Parâmetros:
+            - X (array-like): Dados de entrada.
+        
+        Retorna:
+            array-like: Pontuações de decisão.
+        """
+    #  return self.model.decision_function(X)
     
     def score(self, X, y=None):
         return self.model.score(X)

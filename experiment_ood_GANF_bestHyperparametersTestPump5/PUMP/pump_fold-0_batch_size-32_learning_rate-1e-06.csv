@@ -1,0 +1,2 @@
+Model,Fold,batch_size,learning_rate,Execution_Duration,AUC_ROC
+GANF,0,32,1e-06,882.153149496764,0.7934862340456745

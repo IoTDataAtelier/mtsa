@@ -1,0 +1,2 @@
+machine_type,machine_id,learning_rate,batch_size,Mean_AUC_ROC,CI_lower,CI_upper
+fan,00,0.001,32,0.6075496984587894,0.5834952218244601,0.6335915097585859

@@ -24,7 +24,7 @@ def run_ganf_experiment(data_path, experiment_path,netPath,cuda_device,session_n
     batch_size = 128
     learning_rate = 1e-6
     sampling_rate_sound = 16000
-    epochs = 2 #50
+    epochs = 5 #50
     X_train, X_test, Y_train, Y_test = files_train_test_split(data_path)
                              
     experiment_path_current = experiment_path 
@@ -58,7 +58,7 @@ def run_ganf_experiment(data_path, experiment_path,netPath,cuda_device,session_n
     finalNet = model_GANF.get_adjacent_matrix()
     NetworkLearnerModelResultOrchestrator.save_result(finalNet, auc, "final network", netPath,)
     
-    initalNet = model_GANF.get_adjacent_matrix()
+    initalNet = model_GANF.get_initial_adjacent_matrix()
     model_GANF.set_adjacent_matrix(initalNet)
     auc = calculate_aucroc(model_GANF, X_test, Y_test)
     NetworkLearnerModelResultOrchestrator.save_result(initalNet,auc, "intial network", netPath )

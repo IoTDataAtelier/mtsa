@@ -1,2 +1,0 @@
-machine_type,machine_id,max_features,n_estimators,Mean_AUC_ROC,CI_lower,CI_upper
-fan,00,0.5,2,0.5117096994246871,0.4865903204969544,0.5350476006495662

@@ -1,2 +1,0 @@
-machine_type,machine_id,max_features,n_estimators,Mean_AUC_ROC,CI_lower,CI_upper
-slider,00,1.0,70,0.9899633884610528,0.9884673652316627,0.9914026006817321

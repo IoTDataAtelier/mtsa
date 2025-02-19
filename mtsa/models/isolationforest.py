@@ -1,4 +1,3 @@
-import math
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, OutlierMixin, check_array
@@ -7,9 +6,6 @@ from sklearn.pipeline import (
     FeatureUnion
 ) 
 from mtsa.features.stats import (
-    MagnitudeMeanFeatureMfcc, 
-    MagnitudeStdFeatureMfcc, 
-    CorrelationFeatureMfcc,
     FEATURES,
     get_features
     )
@@ -42,19 +38,17 @@ class IForest(BaseEstimator, OutlierMixin):
     """
 
     def __init__(self,
-                 n_estimators=200,
-                 max_samples="auto",
-                 contamination='auto',
+                 n_estimators=100,
+                 max_samples=256,
+                 contamination=0.01,
                  max_features=1.0,
                  bootstrap=False,
                  n_jobs=None,
                  random_state=None,
                  verbose=0,
-                 warm_start=False,
-                 #final_model=None, 
+                 warm_start=False, 
                  features=FEATURES,
-                 sampling_rate=None,
-                 #n_mfcc=20  
+                 sampling_rate=None, 
                  ) -> None:
         super().__init__()
         self.n_estimators = n_estimators
@@ -67,9 +61,7 @@ class IForest(BaseEstimator, OutlierMixin):
         self.verbose = verbose
         self.warm_start = warm_start
         self.sampling_rate = sampling_rate
-        #self.final_model = final_model
         self.features = features
-        #self.n_mfcc = n_mfcc
         
         self.execution_duration = None
         self.model_parameters_names = None

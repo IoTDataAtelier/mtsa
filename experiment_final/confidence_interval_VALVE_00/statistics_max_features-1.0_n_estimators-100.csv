@@ -1,2 +1,0 @@
-machine_type,machine_id,max_features,n_estimators,Mean_AUC_ROC,CI_lower,CI_upper
-valve,00,1.0,100,0.9048795988983829,0.8989336911235082,0.9110656027116729

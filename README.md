@@ -50,3 +50,4 @@ MTSA includes the following anomaly detection approaches:
 - **Hitachi**: A robust approach tailored for industrial anomaly detection.
 - **RANSynCoders**: A state-of-the-art model enhanced with MFCC for better performance on acoustic data.
 - **GANF**: A generative adversarial network approach, also enhanced with MFCC.
+- **Isolation Forest**: An approach using ITrees to isolate anomalies, also enhanced with MFCC.

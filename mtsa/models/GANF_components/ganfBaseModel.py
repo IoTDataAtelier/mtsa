@@ -9,25 +9,26 @@ from torch.utils.data import DataLoader
 from mtsa.models.GANF_components.NF import MAF, RealNVP
 from mtsa.models.GANF_components.ganfLayoutData import GANFData
 from mtsa.models.GANF_components.gnn import GNN
+from mtsa.models.networkAnalysis.networkLearnerModel import NetworkLearnerModel
 
-class GANFBaseModel(nn.Module):
-    def __init__ (self, 
-                  n_blocks = 6,
-                  input_size = 1,
-                  hidden_size = 32,
-                  n_hidden = 1,
-                  dropout = 0.0,
-                  model="MAF",
-                  batch_norm=False,
-                  rho_max = float(1e16),
-                  max_iteraction = 2,
-                  learning_rate = float(1e-3),
-                  alpha = 0.0,
-                  weight_decay = float(5e-4),
-                  epochs = 20,
-                  device = None,
-                  index_CUDA_device = '0'
-                  ):
+class GANFBaseModel(NetworkLearnerModel, nn.Module):
+    def __init__(
+        self,
+        n_blocks=6,
+        input_size=1,
+        hidden_size=32,
+        n_hidden=1,
+        dropout=0.0,
+        model="MAF",
+        batch_norm=False,
+        rho_max=float(1e16),
+        max_iteraction=2,
+        learning_rate=float(1e-3),
+        alpha=0.0,
+        weight_decay=float(5e-4),
+        epochs=20,
+        device=None,
+    ):
         super().__init__()
         self.min = 0
         self.max = 0 
@@ -40,10 +41,10 @@ class GANFBaseModel(nn.Module):
         self.epochs = epochs
         self.hidden_state = None
 
-        if device != None: 
+        if device is not None: 
             self.device = device
         else:
-            self.device = torch.device(f'cuda:{str(index_CUDA_device)}' if torch.cuda.is_available() else "cpu")
+            self.device = torch.device(f'cuda:{str(0)}' if torch.cuda.is_available() else "cpu")
 
         #Reducing dimensionality 
         self.rnn = nn.LSTM(input_size=input_size,hidden_size=hidden_size,batch_first=True, dropout=dropout, device=self.device)
@@ -67,6 +68,12 @@ class GANFBaseModel(nn.Module):
       
     def get_adjacent_matrix(self):
         return self.adjacent_matrix
+    
+    def set_adjacent_matrix(self, adjacent_matrix):
+        self.adjacent_matrix = adjacent_matrix
+        
+    def get_initial_adjacent_matrix(self):
+        return self.initial_adjacent_matrix
 
     def fit(self, X, y=None, batch_size = None, epochs= None, max_iteraction= None, learning_rate = None, debug_dataframe= None, isWaveData = False, mono = None):
         torch.cuda.manual_seed(10)
@@ -90,9 +97,11 @@ class GANFBaseModel(nn.Module):
             self.learning_rate = learning_rate
         if batch_size is None:
             batch_size = 32
-
+            
+        self.batch_size = batch_size
         dimension = X.data.shape[1]
         self.adjacent_matrix = self.__init_adjacent_matrix(X.data)
+        self.initial_adjacent_matrix = self.adjacent_matrix.detach().clone()
 
         dataloaders = self.__create_dataLoader(torch.tensor(X), batch_size=batch_size, isMonoData = mono)
         adjacent_matrix = self.adjacent_matrix
@@ -108,34 +117,30 @@ class GANFBaseModel(nn.Module):
         return self.__score_discrete_data(X=X)
     
     def __forward(self, x, A):
-        # x: N X K X L X D 
         full_shape = x.shape
 
-        # reshape: N*K, L, D
         x = x.reshape((x.shape[0]*x.shape[1], x.shape[2], x.shape[3]))
         h,_ = self.rnn(x)
 
-        # resahpe: N, K, L, H
         h = h.reshape((full_shape[0], full_shape[1], h.shape[1], h.shape[2]))
 
         h = self.gcn(h, A)
 
-        # reshappe N*K*L,H
         h = h.reshape((-1,h.shape[3]))
         x = x.reshape((-1,full_shape[3]))
 
-        log_prob = self.nf.log_prob(x,h).reshape([full_shape[0],-1])#*full_shape[1]*full_shape[2]
+        log_prob = self.nf.log_prob(x,h).reshape([full_shape[0],-1])
         log_prob = log_prob.mean(dim=1)
         log_prob_x = log_prob.mean()
         return log_prob_x
 
     def __fitCore(self, loss_best, h_A_old, h_tol, dimension, dataloaders, adjacent_matrix, rho):
-        previous_total_loss = None
+        foward_count = 0
         for j in range(self.max_iteraction):
             print('iteraction ' + str(j+1) + ' of ' + str(self.max_iteraction))
 
             while rho < self.rho_max:
-                learning_rate = self.learning_rate #np.math.pow(0.1, epoch // 100)    
+                learning_rate = self.learning_rate   
                 optimizer = torch.optim.Adam([
                     {'params': self.parameters(), 'weight_decay':self.weight_decay},
                     {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
@@ -156,19 +161,19 @@ class GANFBaseModel(nn.Module):
 
                             h.to(self.device)
                             
+                            if epoch == int(.5 * self.epochs) or epoch == int(.3 * self.epochs) or foward_count == 0:
+                                networkName = "first matrix" if foward_count == 0 else "intermediate matrix"
+                                super().notify_observers(adjacent_matrix, epoch, h, total_loss, networkName, learning_rate=learning_rate, batch_size=self.batch_size)
+                            
                             total_loss.backward()
                             clip_grad_value_(self.parameters(), 1)
                             optimizer.step()
                             loss_train.append(loss.item())
                             adjacent_matrix.data.copy_(torch.clamp(adjacent_matrix.data, min=0, max=1))
-                            
+                            foward_count += 1
                             if np.mean(loss_train) < loss_best:
                                 loss_best = np.mean(loss_train)
                                 self.adjacent_matrix = adjacent_matrix
-
-                            previous_total_loss = total_loss
-
-                    print('Epoch: {}, train -log_prob: {:.2f}, h: {}'.format(epoch, np.mean(loss_train), h.item()))
                     
                 del optimizer
                 torch.cuda.empty_cache()
@@ -183,7 +188,9 @@ class GANFBaseModel(nn.Module):
 
             if h_A_old <= h_tol or rho >= self.rho_max:
                 break
-    
+            
+            super().notify_observers(adjacent_matrix, epoch, h, total_loss, "final matrix", learning_rate=learning_rate, batch_size=self.batch_size)
+
     def __score_discrete_data(self, X):
         X = np.array(X)
         X = X.reshape(X.shape[0], X.shape[1], 1, 1)
@@ -248,4 +255,13 @@ class GANFBaseModel(nn.Module):
         init = torch.zeros([X.shape[1], X.shape[1]])
         init = xavier_uniform_(init).abs()
         init = init.fill_diagonal_(0.0)
+        return torch.tensor(init, requires_grad=True, device=self.device)
+    
+    def get_random_adjacent_matrix(self):
+        random_state = torch.get_rng_state()
+        torch.seed()
+        init = torch.zeros([20, 20])
+        init = xavier_uniform_(init).abs()
+        init = init.fill_diagonal_(0.0)
+        torch.set_rng_state(random_state)
         return torch.tensor(init, requires_grad=True, device=self.device)

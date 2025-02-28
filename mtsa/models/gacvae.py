@@ -21,7 +21,7 @@ class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
         learning_rate=None,
         mono=True,
         use_array2mfcc=False,
-        index_CUDA_device="0",
+        device=0,
     ) -> None:
         super().__init__()
         self.sampling_rate = sampling_rate
@@ -30,7 +30,7 @@ class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.mono = mono
-        self.final_model = GACVAEBaseModel(index_CUDA_device=index_CUDA_device)
+        self.final_model = GACVAEBaseModel(device=device)
         self.use_array2mfcc = use_array2mfcc
         self.model = self._build_model()
 
@@ -115,3 +115,17 @@ class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
             )
 
         return model
+    
+    def attach_observer(self, observer):
+        if (self.final_model is not None):
+            self.final_model.attach_observer(observer)
+            
+    def set_adjacent_matrix(self, adjacent_matrix):
+        if (self.final_model is not None):
+            self.final_model.set_adjacent_matrix(adjacent_matrix)
+            
+    def get_random_adjacent_matrix(self):
+         return self.final_model.get_random_adjacent_matrix()
+     
+    def get_initial_adjacent_matrix(self):
+        return self.final_model.get_initial_adjacent_matrix()

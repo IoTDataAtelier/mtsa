@@ -9,12 +9,13 @@ from torch.nn.utils import clip_grad_value_
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from mtsa.models.networkAnalysis.networkLearnerModel import NetworkLearnerModel
 from mtsa.models.GANF_components.ganfLayoutData import GANFData
 from mtsa.models.GANF_components.gnn import GNN
 from mtsa.models.GANF_components.vae import CVAE
 
 
-class GACVAEBaseModel(nn.Module):
+class GACVAEBaseModel(NetworkLearnerModel, nn.Module):
     def __init__(
         self,
         input_size=1,
@@ -27,7 +28,6 @@ class GACVAEBaseModel(nn.Module):
         weight_decay=float(5e-4),
         epochs=20,
         device=None,
-        index_CUDA_device="0",
     ):
         super().__init__()
         self.min = 0
@@ -45,7 +45,7 @@ class GACVAEBaseModel(nn.Module):
             self.device = device
         else:
             self.device = torch.device(
-                f"cuda:{str(index_CUDA_device)}" if torch.cuda.is_available() else "cpu"
+                f"cuda:{str(str(0))}" if torch.cuda.is_available() else "cpu"
             )
 
         # Reducing dimensionality
@@ -71,6 +71,12 @@ class GACVAEBaseModel(nn.Module):
 
     def get_adjacent_matrix(self):
         return self.adjacent_matrix
+    
+    def set_adjacent_matrix(self, adjacent_matrix):
+        self.adjacent_matrix = adjacent_matrix
+        
+    def get_initial_adjacent_matrix(self):
+        return self.initial_adjacent_matrix
 
     def fit(
         self,
@@ -106,8 +112,10 @@ class GACVAEBaseModel(nn.Module):
         if batch_size is None:
             batch_size = 32
 
+        self.batch_size = batch_size
         dimension = X.data.shape[1]
         self.adjacent_matrix = self.__init_adjacent_matrix(X.data)
+        self.initial_adjacent_matrix = self.adjacent_matrix.detach().clone()
 
         dataloaders = self.__create_dataLoader(
             torch.tensor(X), batch_size=batch_size, isMonoData=mono
@@ -151,6 +159,7 @@ class GACVAEBaseModel(nn.Module):
     def __fitCore(
         self, loss_best, h_A_old, h_tol, dimension, dataloaders, adjacent_matrix, rho
     ):
+        foward_count = 0
         for j in range(self.max_iteraction):
             while rho < self.rho_max:
                 learning_rate = self.learning_rate  # np.math.pow(0.1, epoch // 100)
@@ -181,6 +190,10 @@ class GACVAEBaseModel(nn.Module):
                             total_loss = loss + 0.5 * rho * h * h + self.alpha * h
 
                             h.to(self.device)
+                            
+                            if epoch == int(.5 * self.epochs) or epoch == int(.3 * self.epochs) or foward_count == 0:
+                                networkName = "first matrix" if foward_count == 0 else "intermediate matrix"
+                                super().notify_observers(adjacent_matrix, epoch, h, total_loss, networkName, learning_rate=learning_rate, batch_size=self.batch_size)
 
                             total_loss.backward()
                             clip_grad_value_(self.parameters(), 1)
@@ -189,7 +202,7 @@ class GACVAEBaseModel(nn.Module):
                             adjacent_matrix.data.copy_(
                                 torch.clamp(adjacent_matrix.data, min=0, max=1)
                             )
-
+                            foward_count += 1
                             if np.mean(loss_train) < loss_best:
                                 loss_best = np.mean(loss_train)
                                 self.adjacent_matrix = adjacent_matrix
@@ -207,6 +220,9 @@ class GACVAEBaseModel(nn.Module):
 
             if h_A_old <= h_tol or rho >= self.rho_max:
                 break
+            
+            super().notify_observers(adjacent_matrix, epoch, h, total_loss, "final matrix", learning_rate=learning_rate, batch_size=self.batch_size)
+            
 
     def __score_discrete_data(self, X):
         X = np.array(X)
@@ -282,3 +298,12 @@ class GACVAEBaseModel(nn.Module):
         init = init.fill_diagonal_(0.0)
         adjacentMatrix = torch.tensor(init, requires_grad=True, device=self.device)
         return adjacentMatrix
+
+    def get_random_adjacent_matrix(self):
+        random_state = torch.get_rng_state()
+        torch.seed()
+        init = torch.zeros([20, 20])
+        init = xavier_uniform_(init).abs()
+        init = init.fill_diagonal_(0.0)
+        torch.set_rng_state(random_state)
+        return torch.tensor(init, requires_grad=True, device=self.device)

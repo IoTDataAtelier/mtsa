@@ -13,11 +13,10 @@ if module_path not in sys.path:
     sys.path.append(module_path)
 
 from mtsa.metrics import calculate_aucroc
-from mtsa.models.ganf import GANF
+from mtsa.models.gacvae import GACVAE
 from mtsa.utils import files_train_test_split
-from mtsa.mtsa.models.gacvae import GACVAE
 
-def run_ganf_experiment():
+def run_gacvae_experiment():
     batch_size_values = np.array([512])
     learning_rate_values = np.array([1e-3,1e-6])
     sampling_rate_sound = 16000
@@ -52,13 +51,13 @@ def run_ganf_experiment():
 
                     x_train_fold, y_train_fold = X_train[train_index], Y_train[train_index]
 
-                    model_GANF = GACVAE(sampling_rate=sampling_rate_sound, index_CUDA_device=1)
-                    model_GANF.fit(x_train_fold, y_train_fold, batch_size=int(batch_size), learning_rate=learning_rate, isWaveData=True)
+                    model_gacvae = GACVAE(sampling_rate=sampling_rate_sound, index_CUDA_device=1)
+                    model_gacvae.fit(x_train_fold, y_train_fold, batch_size=int(batch_size), learning_rate=learning_rate, isWaveData=True)
 
-                    auc = calculate_aucroc(model_GANF, X_test, Y_test)
+                    auc = calculate_aucroc(model_gacvae, X_test, Y_test)
                     scores.append(auc)
 
-                    del model_GANF
+                    del model_gacvae
 
                 experiment_dataframe.loc[len(experiment_dataframe)] = {'batch_size': batch_size, 'epoch_size': 20, 'learning_rate': learning_rate, 'sampling_rate': sampling_rate_sound,'AUC_ROCs': str(scores)}
 
@@ -75,6 +74,6 @@ with torch.cuda.device(1):
     if __name__ == '__main__':
         set_start_method('spawn')
         info('main line')
-        p = Process(target=run_ganf_experiment)
+        p = Process(target=run_gacvae_experiment)
         p.start()
         p.join()

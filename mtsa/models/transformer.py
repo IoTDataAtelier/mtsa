@@ -1,48 +1,85 @@
 import torch
 import torch.nn as nn
-from mtsa.models.transformer_components.positional_encoding import PositionalEncoding
-from mtsa.models.transformer_components.encoder_layer import EncoderLayer
-from mtsa.models.transformer_components.decoder_layer import DecoderLayer
+from sklearn.base import BaseEstimator, OutlierMixin
+from mtsa.models.transformer_components.transformer_base import TransformerBase
+from sklearn.pipeline import Pipeline
+from mtsa.features.mel import Array2Mfcc, Array2MelSpec
+from mtsa.utils import Wav2Array
+from mtsa.models.transformer_components.transformer_layout_data import TransformerData
+import numpy as np
 
-class Transformer(nn.Module):
-  def __init__(self, mfcc_dim, d_model, nhead, num_layers, d_ff, max_seq_length, dropout, device):
-    super(Transformer, self).__init__()
-    self.device = device
-    self.src_linear_input = nn.Linear(mfcc_dim, d_model).to(device)
-    self.tgt_linear_input = nn.Linear(mfcc_dim, d_model).to(device)
-    self.model_output = nn.Linear(d_model, mfcc_dim).to(device)
 
-    self.positional_encoding = PositionalEncoding(d_model, max_seq_length, dropout).to(device)
+class Transformer(nn.Module, BaseEstimator, OutlierMixin):
+  def __init__(self, 
+               input_dim=20,
+               d_model=32,
+               nhead=1,
+               num_layers=1,
+               d_ff=64,
+               max_seq_length=350,
+               dropout=0.1,
+               sampling_rate=None,
+               mono=True,
+               use_array2mfcc=None,
+               use_array2melspec=None,
+               is_for_wave_data=True,
+               device="cuda"
+               ):
+    super().__init__()
+    self.input_dim=input_dim
+    self.d_model=d_model
+    self.nhead=nhead
+    self.num_layers=num_layers
+    self.d_ff=d_ff
+    self.max_seq_length=max_seq_length
+    self.dropout=dropout
+    self.sampling_rate=sampling_rate
+    self.mono=mono
+    self.use_array2mfcc=use_array2mfcc
+    self.use_array2melspec=use_array2melspec
+    self.is_for_wave_data=is_for_wave_data
+    self.device=device
+    self.final_model = TransformerBase(
+      input_dim=self.input_dim, d_model=self.d_model, nhead=self.nhead, 
+      num_layers=self.num_layers, d_ff=self.d_ff, max_seq_length=self.max_seq_length,
+      dropout=self.dropout, device=self.device
+    )
+    self.model=self._build_model()
 
-    self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_ff, dropout) for _ in range(num_layers)]).to(device)
-    self.decoder_layers = nn.ModuleList([DecoderLayer(d_model, nhead, d_ff, dropout) for _ in range(num_layers)]).to(device)
+  def fit(self, X, y=None, batch_size=32, epochs=15, learning_rate=0.001):
+    return self.model.fit(
+      X,
+      y,
+      final_model__batch_size=batch_size,
+      final_model__epochs=epochs,
+      final_model__learning_rate=learning_rate,
+    )
+  
+  def score_samples(self, X):
+    return np.array(
+      list(
+        map(
+          self.model.score_samples, 
+          [[x] for x in X])
+        )
+      )
+  
+  def predict(self, X):
+    return self.model.predict(X)
 
-    self.dropout1 = nn.Dropout(dropout).to(device)
-    self.dropout2 = nn.Dropout(dropout).to(device)
+  def _build_model(self):
+    wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=self.mono)
 
-  def generate_mask(self, tgt, device):
-    seq_length = tgt.size(1)
-    nopeak_mask = (1 - torch.triu(torch.ones(1, seq_length, seq_length), diagonal=1)).bool().to(device)
-    tgt_mask = nopeak_mask
-    return tgt_mask
+    steps = [("wav2array", wav2array)]
+    
+    if self.use_array2mfcc:
+      steps.append(("array2mfcc", Array2Mfcc(sampling_rate=self.sampling_rate)))
 
-  def forward(self, src, tgt):
-    src = self.src_linear_input(src)
-    tgt = self.tgt_linear_input(tgt)
+    if self.use_array2melspec:
+      steps.append(("array2melspec", Array2MelSpec(sampling_rate=self.sampling_rate)))
 
-    src = self.positional_encoding(src)
-    tgt = self.positional_encoding(tgt)
+    steps.append(("final_model", self.final_model))
 
-    src = self.dropout1(src)
-    tgt = self.dropout2(tgt)
-    tgt_m = self.generate_mask(tgt, self.device)
-    enc_output = src
-    for enc_layer in self.encoder_layers:
-      enc_output = enc_layer(enc_output, mask=None)
+    return Pipeline(steps=steps)
 
-    dec_output = tgt
-    for dec_layer in self.decoder_layers:
-      dec_output = dec_layer(dec_output, enc_output, src_mask=None, tgt_mask=tgt_m)
-
-    output = self.model_output(dec_output)
-    return output
+    

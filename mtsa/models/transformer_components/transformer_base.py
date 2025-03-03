@@ -79,8 +79,8 @@ class TransformerBase(nn.Module):
       total_loss = 0.0
       start_time = time.time()
 
-      for inputs, labels in train_loader:
-        inputs, labels = inputs.to(self.device), labels.to(self.device)
+      for inputs in train_loader:
+        inputs = inputs.to(self.device)
         inputs = inputs.permute(0, 2, 1)  # (batch_size, seq_len, feature_dim)
         outputs = self(inputs, inputs)
         loss = criterion_reconstruction(inputs, outputs)

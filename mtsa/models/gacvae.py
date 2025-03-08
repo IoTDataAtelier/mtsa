@@ -2,13 +2,16 @@ from functools import reduce
 
 import numpy as np
 import torch.nn as nn
+from tqdm import tqdm
+
 from sklearn import metrics
 from sklearn.base import BaseEstimator, OutlierMixin
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline, FeatureUnion
 
 from mtsa.features.mel import Array2Mfcc
 from mtsa.models.GANF_components.gacvaeBaseModel import GACVAEBaseModel
 from mtsa.utils import Wav2Array
+from mtsa.features.stats import FEATURES
 
 
 class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
@@ -21,6 +24,7 @@ class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
         learning_rate=None,
         mono=True,
         use_array2mfcc=False,
+        use_featureUnion= False,
         device=0,
     ) -> None:
         super().__init__()
@@ -30,6 +34,7 @@ class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.mono = mono
+        self.use_featureUnion = use_featureUnion
         self.final_model = GACVAEBaseModel(device=device)
         self.use_array2mfcc = use_array2mfcc
         self.model = self._build_model()
@@ -77,7 +82,7 @@ class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
         return self.model.predict(X)
 
     def score_samples(self, X):
-        return np.array(list(map(self.model.score_samples, [[x] for x in X])))
+        return np.array(list(map(self.model.score_samples, tqdm([[x] for x in X], desc="Predicting..."))))
 
     def score(self, X, Y):
         X = self.score_samples
@@ -91,8 +96,19 @@ class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
     def _build_model(self):
         array2mfcc = Array2Mfcc(sampling_rate=self.sampling_rate)
         wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=self.mono)
+        features = FeatureUnion(FEATURES)
         # mono = (self.mono and not self.use_array2mfcc)
-        if self.use_array2mfcc and self.isForWaveData:
+        
+        if self.use_featureUnion and self.use_array2mfcc and self.isForWaveData:
+            model = Pipeline(
+                steps=[
+                    ("wav2array", wav2array),
+                    ("array2mfcc", array2mfcc),
+                    ("features", features),
+                    ("final_model", self.final_model),
+                ]
+            )
+        elif self.use_array2mfcc and self.isForWaveData:
             model = Pipeline(
                 steps=[
                     ("wav2array", wav2array),

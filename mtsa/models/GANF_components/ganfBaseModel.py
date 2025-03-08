@@ -6,6 +6,7 @@ import pandas as pd
 from torch.nn.init import xavier_uniform_
 from torch.nn.utils import clip_grad_value_
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from mtsa.models.GANF_components.NF import MAF, RealNVP
 from mtsa.models.GANF_components.ganfLayoutData import GANFData
 from mtsa.models.GANF_components.gnn import GNN
@@ -145,7 +146,7 @@ class GANFBaseModel(NetworkLearnerModel, nn.Module):
                     {'params': self.parameters(), 'weight_decay':self.weight_decay},
                     {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
 
-                for epoch in range(self.epochs):
+                for epoch in tqdm(range(self.epochs), desc=f'trainning epochs for {str(j)} iteraction.', unit='epochs'):
                     loss_train = []
                     epoch += 1
                     self.train()

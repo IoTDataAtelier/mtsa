@@ -2,8 +2,13 @@
 
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
+from scipy.stats import kurtosis, skew
+from scipy.fft import rfft
 from functools import reduce
 import itertools as ite
+from mtsa.correlation_networks import PearsonCorrelationNetwork
+
+#region feature extraction strategies
 
 class MagnitudeMeanFeatureMfcc(BaseEstimator, TransformerMixin):
     
@@ -29,7 +34,6 @@ class MagnitudeStdFeatureMfcc(BaseEstimator, TransformerMixin):
         Xt = X.std(axis=2)
         return Xt
     
-from mtsa.correlation_networks import PearsonCorrelationNetwork
 class CorrelationFeatureMfcc(BaseEstimator, TransformerMixin):
     
     def __init__(self) -> None:
@@ -47,6 +51,156 @@ class CorrelationFeatureMfcc(BaseEstimator, TransformerMixin):
         Xt= np.array(list(Xt)) 
         return Xt
     
+class RootMeanSquareFeature(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = np.sqrt(np.mean(X**2))
+        return Xt
+    
+class SquareRootOfAmplitude(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = (np.mean(np.sqrt(np.absolute(X)))) ** 2
+        return Xt
+    
+class Kurtosis(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = kurtosis(X)
+        return Xt
+    
+class Skewness(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = skew(X)
+        return Xt
+    
+class Peak2Peak(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = np.max(X) - np.min(X)
+        return Xt
+    
+class CrestFactor(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        self.root_mean_square_feature = RootMeanSquareFeature()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = np.max(np.absolute(X)) / RootMeanSquareFeature.transform(X)
+        return Xt
+    
+class ImpulseValue(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt =np.max(np.absolute(X)) / np.mean(np.absolute(X))
+        return Xt
+    
+class MarginFactor(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        self.square_root_of_amplitude = SquareRootOfAmplitude()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = np.max(np.absolute(X)) / self.square_root_of_amplitude .transform(X)
+        return Xt
+    
+class ShapeFactor(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        self.root_mean_square_feature = RootMeanSquareFeature()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = self.root_mean_square_feature.transform(X) / np.mean(np.absolute(X))
+        return Xt
+
+class KurtosisFactor(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        self.kurtosis = Kurtosis()
+        self.root_mean_square_feature = RootMeanSquareFeature()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = self.kurtosis.transform(X) / (self.root_mean_square_feature.transform(X) ** 4)
+        return Xt
+    
+class FrequencyCenter(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = 2 * np.abs(rfft(X)) / X.size
+        return np.mean(Xt)
+    
+class RootMeanSquareFrequency(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = 2 * np.abs(rfft(X)) / X.size
+        return np.sqrt(np.mean(Xt**2))
+    
+class RootFrequencyVariance(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        self.frequency_center = FrequencyCenter()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        Xt = 2 * np.abs(rfft(X)) / X.size
+        return np.sqrt(np.mean((Xt - self.frequency_center.transform(Xt)) ** 2))
+    
+#endregion
 
 FEATURES = [
     ("M", MagnitudeMeanFeatureMfcc()), 

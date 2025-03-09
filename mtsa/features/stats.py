@@ -115,7 +115,7 @@ class CrestFactor(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = np.max(np.absolute(X)) / RootMeanSquareFeature.transform(X)
+        Xt = np.max(np.absolute(X)) / self.root_mean_square_feature.transform(X)
         return Xt
     
 class ImpulseValue(BaseEstimator, TransformerMixin):
@@ -138,7 +138,7 @@ class MarginFactor(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = np.max(np.absolute(X)) / self.square_root_of_amplitude .transform(X)
+        Xt = np.max(np.absolute(X)) / self.square_root_of_amplitude.transform(X)
         return Xt
     
 class ShapeFactor(BaseEstimator, TransformerMixin):

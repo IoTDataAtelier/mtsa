@@ -199,6 +199,44 @@ class RootFrequencyVariance(BaseEstimator, TransformerMixin):
     def transform(self, X, y=None, **fit_params):
         Xt = 2 * np.abs(rfft(X)) / X.size
         return np.sqrt(np.mean((Xt - self.frequency_center.transform(Xt)) ** 2))
+
+class FeatureExtractionMixer(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        self.rootMeanSquareFeature = RootMeanSquareFeature()
+        self.squareRootOfAmplitude = SquareRootOfAmplitude()
+        self.kurtosis = Kurtosis()
+        self.skewness = Skewness()
+        self.peak2Peak = Peak2Peak()
+        self.crestFactor = CrestFactor()
+        self.impulseValue = ImpulseValue()
+        self.marginFactor = MarginFactor()
+        self.shapeFactor = ShapeFactor()
+        self.kurtosisFactor = KurtosisFactor()
+        self.frequencyCenter = FrequencyCenter()
+        self.rootMeanSquareFrequency = RootMeanSquareFrequency()
+        self.rootFrequencyVariance = RootFrequencyVariance()
+        
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        result = []
+        result.append(self.rootMeanSquareFeature.transform(X))
+        result.append(self.squareRootOfAmplitude.transform(X))
+        result.append(self.kurtosis.transform(X))
+        result.append(self.skewness.transform(X))
+        result.append(self.peak2Peak.transform(X))
+        result.append(self.crestFactor.transform(X))
+        result.append(self.impulseValue.transform(X))
+        result.append(self.marginFactor.transform(X))
+        result.append(self.shapeFactor.transform(X))
+        result.append(self.kurtosisFactor.transform(X))
+        result.append(self.frequencyCenter .transform(X))
+        result.append(self.rootMeanSquareFrequency.transform(X))
+        result.append(self.rootFrequencyVariance.transform(X))
+        result = np.array(result, dtype=float)
+        return result
     
 #endregion
 

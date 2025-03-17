@@ -203,39 +203,24 @@ class RootFrequencyVariance(BaseEstimator, TransformerMixin):
 class FeatureExtractionMixer(BaseEstimator, TransformerMixin):
     def __init__(self) -> None:
         super().__init__()
-        self.rootMeanSquareFeature = RootMeanSquareFeature()
-        self.squareRootOfAmplitude = SquareRootOfAmplitude()
-        self.kurtosis = Kurtosis()
-        self.skewness = Skewness()
-        self.peak2Peak = Peak2Peak()
-        self.crestFactor = CrestFactor()
-        self.impulseValue = ImpulseValue()
-        self.marginFactor = MarginFactor()
-        self.shapeFactor = ShapeFactor()
-        self.kurtosisFactor = KurtosisFactor()
-        self.frequencyCenter = FrequencyCenter()
-        self.rootMeanSquareFrequency = RootMeanSquareFrequency()
-        self.rootFrequencyVariance = RootFrequencyVariance()
-        
+        self.strategies = []
+    
     def fit(self, X, y=None):
         return self
+
+    def append_strategy(self, feature_extraction_strategy):
+        self.strategies.append(feature_extraction_strategy)
     
     def transform(self, X, y=None, **fit_params):
-        result = []
-        result.append(self.rootMeanSquareFeature.transform(X))
-        result.append(self.squareRootOfAmplitude.transform(X))
-        result.append(self.kurtosis.transform(X))
-        result.append(self.skewness.transform(X))
-        result.append(self.peak2Peak.transform(X))
-        result.append(self.crestFactor.transform(X))
-        result.append(self.impulseValue.transform(X))
-        result.append(self.marginFactor.transform(X))
-        result.append(self.shapeFactor.transform(X))
-        result.append(self.kurtosisFactor.transform(X))
-        result.append(self.frequencyCenter .transform(X))
-        result.append(self.rootMeanSquareFrequency.transform(X))
-        result.append(self.rootFrequencyVariance.transform(X))
-        result = np.array(result, dtype=float)
+        samples = []
+        for x in X:
+            features = []
+            for strategy in self.strategies: 
+                features.append(float(strategy.transform(x)))
+            features = np.array(features, dtype=float)
+            samples.append(features)
+            
+        result = np.array(samples)
         return result
     
 #endregion

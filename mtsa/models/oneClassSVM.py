@@ -54,19 +54,20 @@ class OSVM(BaseEstimator, OutlierMixin):
         features = FeatureUnion(FEATURES)
         featureExtractionMixer = FeatureExtractionMixer()
         
-        # rootMeanSquareFeature = RootMeanSquareFeature()
-        # squareRootOfAmplitude = SquareRootOfAmplitude()
-        # kurtosis = Kurtosis()
-        # skewness = Skewness()
-        # peak2Peak = Peak2Peak()
-        # crestFactor = CrestFactor()
-        # impulseValue = ImpulseValue()
-        # marginFactor = MarginFactor()
-        # shapeFactor = ShapeFactor()
-        # kurtosisFactor = KurtosisFactor()
-        # frequencyCenter = FrequencyCenter()
-        # rootMeanSquareFrequency = RootMeanSquareFrequency()
-        # rootFrequencyVariance = RootFrequencyVariance()
+        featureExtractionMixer.append_strategy(RootMeanSquareFeature())
+        featureExtractionMixer.append_strategy(SquareRootOfAmplitude())
+        featureExtractionMixer.append_strategy(Kurtosis())
+        featureExtractionMixer.append_strategy(Skewness())
+        featureExtractionMixer.append_strategy(Peak2Peak())
+        featureExtractionMixer.append_strategy(CrestFactor())
+        featureExtractionMixer.append_strategy(ImpulseValue())
+        featureExtractionMixer.append_strategy(MarginFactor())
+        featureExtractionMixer.append_strategy(ShapeFactor())
+        featureExtractionMixer.append_strategy(KurtosisFactor())
+        featureExtractionMixer.append_strategy(FrequencyCenter())
+        featureExtractionMixer.append_strategy(RootMeanSquareFrequency())
+        featureExtractionMixer.append_strategy(RootFrequencyVariance())
+        
         
         if self.use_array2mfcc and self.use_featureUnion:
             model = Pipeline(
@@ -101,25 +102,5 @@ class OSVM(BaseEstimator, OutlierMixin):
                     ("final_model", self.final_model),
                 ]
             )
-        # else:
-        #     model = Pipeline(
-        #         steps=[
-        #             ("wav2array", wav2array),
-        #             ("rootMeanSquareFeature",rootMeanSquareFeature),
-        #             ("squareRootOfAmplitude",squareRootOfAmplitude),
-        #             ("kurtosis",kurtosis),
-        #             ("skewness",skewness),
-        #             ("peak2Peak",peak2Peak),
-        #             ("crestFactor",crestFactor),
-        #             ("impulseValue",impulseValue),
-        #             ("marginFactor",marginFactor),
-        #             ("shapeFactor",shapeFactor),
-        #             ("kurtosisFactor",kurtosisFactor),
-        #             ("frequencyCenter",frequencyCenter),
-        #             ("rootMeanSquareFrequenc",rootMeanSquareFrequency),
-        #             ("rootFrequencyVariance",rootFrequencyVariance),
-        #             ("final_model", self.final_model),
-        #         ]
-        #     )
-        
+
         return model

@@ -199,6 +199,29 @@ class RootFrequencyVariance(BaseEstimator, TransformerMixin):
     def transform(self, X, y=None, **fit_params):
         Xt = 2 * np.abs(rfft(X)) / X.size
         return np.sqrt(np.mean((Xt - self.frequency_center.transform(Xt)) ** 2))
+
+class FeatureExtractionMixer(BaseEstimator, TransformerMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        self.strategies = []
+    
+    def fit(self, X, y=None):
+        return self
+
+    def append_strategy(self, feature_extraction_strategy):
+        self.strategies.append(feature_extraction_strategy)
+    
+    def transform(self, X, y=None, **fit_params):
+        samples = []
+        for x in X:
+            features = []
+            for strategy in self.strategies: 
+                features.append(float(strategy.transform(x)))
+            features = np.array(features, dtype=float)
+            samples.append(features)
+            
+        result = np.array(samples)
+        return result
     
 #endregion
 

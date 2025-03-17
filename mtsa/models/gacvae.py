@@ -3,6 +3,7 @@ from functools import reduce
 import numpy as np
 import torch.nn as nn
 from tqdm import tqdm
+import time
 
 from sklearn import metrics
 from sklearn.base import BaseEstimator, OutlierMixin
@@ -58,8 +59,9 @@ class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
             batch_size = self.batch_size
         if learning_rate is None:
             learning_rate = self.learning_rate
-
-        return self.model.fit(
+            
+        start = time.perf_counter()
+        self.model.fit(
             X,
             y,
             final_model__batch_size=batch_size,
@@ -70,6 +72,9 @@ class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
             final_model__isWaveData=self.isForWaveData,
             final_model__mono=mono,
         )
+        end = time.perf_counter()
+        self.last_fit_time = end - start
+        return self.last_fit_time #seconds
 
     def transform(self, X, y=None):
         l = list()

@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import time
 from sklearn.base import BaseEstimator, OutlierMixin, check_array
 from sklearn.pipeline import (
     Pipeline, 
@@ -62,7 +63,7 @@ class IForest(BaseEstimator, OutlierMixin):
         self.warm_start = warm_start
         self.sampling_rate = sampling_rate
         self.features = features
-        
+        self.last_fit_time = 0
         self.execution_duration = None
         self.model_parameters_names = None
         self.dataset_name = None
@@ -74,7 +75,11 @@ class IForest(BaseEstimator, OutlierMixin):
         return "IsolationForest " + "+".join([f[0] for f in self.features])
         
     def fit(self, X, y=None):        
-        return self.model.fit(X, y)
+        start = time.perf_counter()    
+        self.model.fit(X, y)
+        end = time.perf_counter()
+        self.last_fit_time = end - start
+        return self.last_fit_time #seconds
 
     def transform(self, X, y=None):
         l = list()

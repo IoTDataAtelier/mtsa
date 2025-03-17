@@ -1,6 +1,7 @@
 import torch.nn as nn
 import numpy as np
 from tqdm import tqdm
+import time
 
 from functools import reduce
 
@@ -52,6 +53,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
         self.final_model = GANFBaseModel(device=device)
         self.use_array2mfcc = use_array2mfcc
         self.model = self._build_model()
+        self.last_fit_time = 0
 
     @property
     def name(self):
@@ -72,8 +74,9 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
             batch_size = self.batch_size
         if learning_rate is None:
             learning_rate = self.learning_rate
-
-        return self.model.fit(
+        
+        start = time.perf_counter()    
+        self.model.fit(
             X,
             y,
             final_model__batch_size=batch_size,
@@ -84,6 +87,10 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
             final_model__isWaveData=self.isForWaveData,
             final_model__mono=mono,
         )
+        end = time.perf_counter()
+        
+        self.last_fit_time = end - start
+        return self.last_fit_time #seconds
 
     def transform(self, X, y=None):
         l = list()

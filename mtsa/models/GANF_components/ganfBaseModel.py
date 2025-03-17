@@ -146,7 +146,7 @@ class GANFBaseModel(NetworkLearnerModel, nn.Module):
                     {'params': self.parameters(), 'weight_decay':self.weight_decay},
                     {'params': [adjacent_matrix]}], lr=learning_rate, weight_decay=0.0)
 
-                for epoch in tqdm(range(self.epochs), desc=f'trainning epochs for {str(j)} iteraction.', unit='epochs'):
+                for epoch in tqdm(range(self.epochs), desc=f'trainning epochs for {str(j + 1)} iteraction.', unit='epochs'):
                     loss_train = []
                     epoch += 1
                     self.train()

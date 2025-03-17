@@ -6,6 +6,7 @@ from mtsa.features.mel import Array2Mfcc
 from mtsa.features.stats import CrestFactor, FeatureExtractionMixer, FrequencyCenter, ImpulseValue, Kurtosis, KurtosisFactor, MarginFactor, Peak2Peak, RootFrequencyVariance, RootMeanSquareFeature, RootMeanSquareFrequency, ShapeFactor, Skewness, SquareRootOfAmplitude
 from mtsa.utils import Wav2Array
 from mtsa.features.stats import FEATURES
+import time
 
 class OSVM(BaseEstimator, OutlierMixin):
     def __init__(self, 
@@ -18,13 +19,18 @@ class OSVM(BaseEstimator, OutlierMixin):
         self.use_array2mfcc = use_array2mfcc
         self.use_featureUnion = use_featureUnion
         self.model = self._build_model()
+        self.last_fit_time = 0
         
     @property
     def name(self):
         return "OSVM " + "+".join([f[0] for f in self.features])
         
-    def fit(self, X, y=None):        
-        return self.model.fit(X)
+    def fit(self, X, y=None):    
+        start = time.perf_counter()     
+        self.model.fit(X)
+        end = time.perf_counter()
+        self.last_fit_time = end - start
+        return self.last_fit_time #seconds
         
     def score_samples(self, X):
         pred = self.model.predict(X)

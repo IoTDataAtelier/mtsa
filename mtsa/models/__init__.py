@@ -1,3 +1,4 @@
+from mtsa.models.oneClassSVM import OSVM
 from .hitachi import *
 from .mfccmix import *
 from .ganf import *
@@ -12,6 +13,7 @@ __ALL__ = [
     GANF,
     RANSynCoders,
     IForest,
-    GACVAE
+    GACVAE,
+    OSVM
 ]
 

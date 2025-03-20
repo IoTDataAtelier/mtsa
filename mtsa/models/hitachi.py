@@ -8,6 +8,7 @@ from mtsa.features.mel import Array2MelSpec
 from sklearn.pipeline import Pipeline
 from functools import reduce
 from keras.optimizers import Adam
+import time
 
 class AutoEncoderMixin(Model):
     def score_samples(self, X):
@@ -15,7 +16,7 @@ class AutoEncoderMixin(Model):
     
     def fit(self, x=None, y=None, batch_size=None, epochs=50, verbose=0, callbacks=None, validation_split=0, validation_data=None, shuffle=True, class_weight=None, sample_weight=None, initial_epoch=0, steps_per_epoch=None, validation_steps=None, validation_batch_size=None, validation_freq=1, max_queue_size=10, workers=1, use_multiprocessing=True):
         #TODO final_model__epochs
-        return super().fit(x=x, y=x, batch_size=batch_size, epochs=epochs, verbose=verbose, callbacks=callbacks, validation_split=validation_split, validation_data=validation_data, shuffle=shuffle, class_weight=class_weight, sample_weight=sample_weight, initial_epoch=initial_epoch, steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_batch_size=validation_batch_size, validation_freq=validation_freq, max_queue_size=max_queue_size, workers=workers, use_multiprocessing=use_multiprocessing)
+        return super().fit(x=x, y=x, batch_size=batch_size, epochs=epochs, verbose=verbose, callbacks=callbacks, validation_split=validation_split, validation_data=validation_data, shuffle=shuffle, class_weight=class_weight, sample_weight=sample_weight, initial_epoch=initial_epoch, steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_batch_size=validation_batch_size, validation_freq=validation_freq)
     
        
 class Hitachi(BaseEstimator, OutlierMixin):
@@ -56,6 +57,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
         self.shuffle=shuffle
         self.validation_split=validation_split
         self.verbose=verbose
+        self.last_fit_time = 0
         self.model = self._build_model()
     
 
@@ -64,7 +66,9 @@ class Hitachi(BaseEstimator, OutlierMixin):
         return "Hitachi"
 
     def fit(self, X, y=None):
-        return self.model.fit(X, 
+        start = time.perf_counter()    
+        
+        self.model.fit(X, 
                               y,
                               final_model__batch_size=self.batch_size,
                               final_model__shuffle= self.shuffle,
@@ -72,6 +76,11 @@ class Hitachi(BaseEstimator, OutlierMixin):
                               final_model__epochs = self.epochs,
                               final_model__verbose = self.verbose
                               )
+        end = time.perf_counter()
+        self.last_fit_time = end - start
+        return self.last_fit_time #seconds
+        
+        
 
     def transform(self, X, y=None):
 

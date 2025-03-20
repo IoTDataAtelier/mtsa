@@ -7,6 +7,7 @@ from mtsa.utils import Demux2Array, Wav2Array
 from mtsa.features.mel import Array2MelSpec
 from sklearn.pipeline import Pipeline
 from functools import reduce
+from keras.optimizers import Adam
 
 class AutoEncoderMixin(Model):
     def score_samples(self, X):
@@ -14,7 +15,7 @@ class AutoEncoderMixin(Model):
     
     def fit(self, x=None, y=None, batch_size=None, epochs=50, verbose=0, callbacks=None, validation_split=0, validation_data=None, shuffle=True, class_weight=None, sample_weight=None, initial_epoch=0, steps_per_epoch=None, validation_steps=None, validation_batch_size=None, validation_freq=1, max_queue_size=10, workers=1, use_multiprocessing=True):
         #TODO final_model__epochs
-        return super().fit(x=x, y=x, batch_size=batch_size, epochs=epochs, verbose=verbose, callbacks=callbacks, validation_split=validation_split, validation_data=validation_data, shuffle=shuffle, class_weight=class_weight, sample_weight=sample_weight, initial_epoch=initial_epoch, steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_batch_size=validation_batch_size, validation_freq=validation_freq, max_queue_size=max_queue_size, workers=workers, use_multiprocessing=use_multiprocessing)
+        return super().fit(x=x, y=x, batch_size=batch_size, epochs=epochs, verbose=verbose, callbacks=callbacks, validation_split=validation_split, validation_data=validation_data, shuffle=shuffle, class_weight=class_weight, sample_weight=sample_weight, initial_epoch=initial_epoch, steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_batch_size=validation_batch_size, validation_freq=validation_freq)
     
        
 class Hitachi(BaseEstimator, OutlierMixin):
@@ -36,6 +37,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
                  mono=False,
                  epochs=50,
                  batch_size=512,
+                 learning_rate=1e-3, 
                  shuffle=True,
                  validation_split=0.1,
                  verbose=0
@@ -50,6 +52,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
         self.mono = mono
         self.epochs=epochs
         self.batch_size=batch_size
+        self.learning_rate = learning_rate
         self.shuffle=shuffle
         self.validation_split=validation_split
         self.verbose=verbose
@@ -124,7 +127,8 @@ class Hitachi(BaseEstimator, OutlierMixin):
         h = Dense(64, activation="relu")(h)
         h = Dense(inputDim, activation=None)(h)
         final_model = AutoEncoderMixin(inputs=inputLayer, outputs=h)
-        final_model.compile(optimizer='adam', loss='mean_squared_error', jit_compile=True)
+        optimizer = Adam(learning_rate=self.learning_rate)
+        final_model.compile(optimizer=optimizer, loss='mean_squared_error', jit_compile=True)
         return final_model
     
     def _build_model(self):
@@ -174,7 +178,8 @@ class HitachiDCASE2020(Hitachi):
         h = Dense(128, activation="relu")(h)
         h = Dense(inputDim, activation="relu")(h)
         final_model = AutoEncoderMixin(inputs=inputLayer, outputs=h)
-        final_model.compile(optimizer='adam', loss='mean_squared_error')
+        optimizer = Adam(learning_rate=self.learning_rate)  
+        final_model.compile(optimizer=optimizer, loss='mean_squared_error')
         return final_model
     
 

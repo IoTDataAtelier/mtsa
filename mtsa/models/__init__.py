@@ -1,4 +1,4 @@
-from mtsa.models.oneClassSVM import OSVM
+from .oneClassSVM import OSVM
 from .hitachi import *
 from .mfccmix import *
 from .ganf import *

@@ -103,7 +103,13 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
         return self.model.predict(X)
 
     def score_samples(self, X):
-        return np.array(list(map(self.model.score_samples, tqdm([[x] for x in X], desc="Predicting..."))))
+        return np.array(
+            list(
+                map(
+                    self.model.score_samples, 
+                    [[x] for x in X])
+                )
+            )
 
     def score(self, X, Y):
         X = self.score_samples

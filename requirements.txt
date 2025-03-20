@@ -10,3 +10,4 @@ graphviz
 torch
 spectrum
 tqdm
+tensorflow

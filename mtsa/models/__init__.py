@@ -1,8 +1,10 @@
+from .oneClassSVM import OSVM
 from .hitachi import *
 from .mfccmix import *
 from .ganf import *
 from .ransyncorders import *
 from .isolationforest import *
+from .gacvae import *
 
 __ALL__ = [
     Hitachi,
@@ -10,6 +12,8 @@ __ALL__ = [
     MFCCMix,
     GANF,
     RANSynCoders,
-    IForest
+    IForest,
+    GACVAE,
+    OSVM
 ]
 

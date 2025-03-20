@@ -1,4 +1,5 @@
 import numpy as np
+import time
 from mtsa.features.mel import Array2Mfcc
 from mtsa.utils import Wav2Array
 from typing import List, Optional
@@ -32,6 +33,8 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
                  abnormal_classifier: int = 1,
                 ) -> None:
             super().__init__()
+            self.last_fit_time = 0
+            
             # Rancoders inputs:
             self.n_estimators = n_estimators
             self.max_features = max_features
@@ -41,7 +44,7 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
             self.activation = activation
             self.output_activation = output_activation
             self.delta = delta
-        
+            
             # Syncrhonization inputs
             self.synchronize = synchronize
             self.force_synchronization = force_synchronization
@@ -74,7 +77,8 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
             pos_amp: bool = True,  # whether to constraint amplitudes to be +ve only
             shuffle: bool = True
         ):
-        return self.model.fit(X, 
+        start = time.perf_counter()  
+        self.model.fit(X, 
                               y, 
                               final_model__timestamps_matrix = timestamps_matrix,
                               final_model__batch_size = batch_size, 
@@ -85,6 +89,9 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
                               final_model__pos_amp = pos_amp,
                               final_model__shuffle = shuffle,
                             )
+        end = time.perf_counter()
+        self.last_fit_time = end - start
+        return self.last_fit_time #seconds
     
     def predict(self, X):
         return self.model.predict(X)

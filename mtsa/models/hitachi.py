@@ -8,6 +8,7 @@ from mtsa.features.mel import Array2MelSpec
 from sklearn.pipeline import Pipeline
 from functools import reduce
 from keras.optimizers import Adam
+import time
 
 class AutoEncoderMixin(Model):
     def score_samples(self, X):
@@ -56,6 +57,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
         self.shuffle=shuffle
         self.validation_split=validation_split
         self.verbose=verbose
+        self.last_fit_time = 0
         self.model = self._build_model()
     
 
@@ -64,7 +66,9 @@ class Hitachi(BaseEstimator, OutlierMixin):
         return "Hitachi"
 
     def fit(self, X, y=None):
-        return self.model.fit(X, 
+        start = time.perf_counter()    
+        
+        self.model.fit(X, 
                               y,
                               final_model__batch_size=self.batch_size,
                               final_model__shuffle= self.shuffle,
@@ -72,6 +76,11 @@ class Hitachi(BaseEstimator, OutlierMixin):
                               final_model__epochs = self.epochs,
                               final_model__verbose = self.verbose
                               )
+        end = time.perf_counter()
+        self.last_fit_time = end - start
+        return self.last_fit_time #seconds
+        
+        
 
     def transform(self, X, y=None):
 

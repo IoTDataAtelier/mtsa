@@ -1,35 +1,21 @@
-import torch.nn as nn
+from functools import reduce
+
 import numpy as np
+import torch.nn as nn
 from tqdm import tqdm
 import time
-
-from functools import reduce
 
 from sklearn import metrics
 from sklearn.base import BaseEstimator, OutlierMixin
 from sklearn.pipeline import Pipeline, FeatureUnion
 
 from mtsa.features.mel import Array2Mfcc
-from mtsa.models.GANF_components.ganfBaseModel import GANFBaseModel
+from mtsa.models.GANF_components.gacvaeBaseModel import GACVAEBaseModel
 from mtsa.utils import Wav2Array
 from mtsa.features.stats import FEATURES
 
 
-"""
-    GRAPH-AUGMENTED NORMALIZING FLOWS
-
-    This class implements the model described in the paper:
-        GRAPH-AUGMENTED NORMALIZING FLOWS FOR ANOMALY DETECTION OF MULTIPLE TIME SERIES
-
-    Key concepts and techniques from the paper have been adapted and implemented here.
-    Any deviations or modifications from the original methodology are noted in the implementation details.
-
-    Reference:
-    [1] X. Wu, Y. Park, S. Tirthapura, "GRAPH-AUGMENTED NORMALIZING FLOWS FOR ANOMALY DETECTION OF MULTIPLE TIME SERIES,"
-    AAAI, vol. 36, no. 8, 2022.  DOI: 10.1609/aaai.v36i8.20829
-"""
-
-class GANF(nn.Module, BaseEstimator, OutlierMixin):
+class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
     def __init__(
         self,
         sampling_rate=None,
@@ -39,8 +25,8 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
         learning_rate=None,
         mono=True,
         use_array2mfcc=False,
+        use_featureUnion= False,
         device=0,
-        use_featureUnion= False
     ) -> None:
         super().__init__()
         self.sampling_rate = sampling_rate
@@ -50,14 +36,13 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
         self.learning_rate = learning_rate
         self.mono = mono
         self.use_featureUnion = use_featureUnion
-        self.final_model = GANFBaseModel(device=device)
+        self.final_model = GACVAEBaseModel(device=device)
         self.use_array2mfcc = use_array2mfcc
         self.model = self._build_model()
-        self.last_fit_time = 0
 
     @property
     def name(self):
-        return "GANF " + "+".join([f[0] for f in self.features])
+        return "GACVAE " + "+".join([f[0] for f in self.features])
 
     def fit(
         self,
@@ -74,8 +59,8 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
             batch_size = self.batch_size
         if learning_rate is None:
             learning_rate = self.learning_rate
-        
-        start = time.perf_counter()    
+            
+        start = time.perf_counter()
         self.model.fit(
             X,
             y,
@@ -88,7 +73,6 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
             final_model__mono=mono,
         )
         end = time.perf_counter()
-        
         self.last_fit_time = end - start
         return self.last_fit_time #seconds
 
@@ -101,7 +85,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
 
     def predict(self, X):
         return self.model.predict(X)
-
+    
     def score_samples(self, X):
         return np.array(
             list(
@@ -158,7 +142,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
             )
 
         return model
-
+    
     def attach_observer(self, observer):
         if (self.final_model is not None):
             self.final_model.attach_observer(observer)
@@ -172,4 +156,3 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
      
     def get_initial_adjacent_matrix(self):
         return self.final_model.get_initial_adjacent_matrix()
-    

@@ -14,19 +14,10 @@ class NetworkLearnerModelResultOrchestrator:
             ],
         }
 
-        ## Verifique se 'network' está no formato correto
-        #if not isinstance(network, list) or not all(isinstance(row, list) for row in network):
-        #    raise ValueError("O parâmetro 'network' deve ser uma lista de listas.")
-
-        ## Verifique se 'metricResult' é um número (float)
-        #if not isinstance(metricResult, (float, int)):
-        #    raise ValueError("O parâmetro 'metricResult' deve ser um número (float ou int).")
-
-        # Dados a serem salvos
         data = [{
             "adj_matrix_name": networkName,  
             "adjacent_matrix": network,    
-            "AUC_ROC": float(metricResult),  # Certifique-se de que é um float
+            "AUC_ROC": float(metricResult),  
         }]
         
         os.makedirs(os.path.dirname(avro_file_name), exist_ok=True)

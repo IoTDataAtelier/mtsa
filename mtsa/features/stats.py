@@ -59,7 +59,17 @@ class RootMeanSquareFeature(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = np.sqrt(np.mean(X**2))
+        def transform_sample(x):
+            xt = np.sqrt(np.mean(x**2))
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
         return Xt
     
 class SquareRootOfAmplitude(BaseEstimator, TransformerMixin):
@@ -70,7 +80,17 @@ class SquareRootOfAmplitude(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = (np.mean(np.sqrt(np.absolute(X)))) ** 2
+        def transform_sample(x):
+            xt = (np.mean(np.sqrt(np.absolute(x)))) ** 2
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
         return Xt
     
 class Kurtosis(BaseEstimator, TransformerMixin):
@@ -81,7 +101,17 @@ class Kurtosis(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = kurtosis(X)
+        def transform_sample(x):
+            xt = kurtosis(x)
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
         return Xt
     
 class Skewness(BaseEstimator, TransformerMixin):
@@ -92,7 +122,17 @@ class Skewness(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = skew(X)
+        def transform_sample(x):
+            xt = skew(x)
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
         return Xt
     
 class Peak2Peak(BaseEstimator, TransformerMixin):
@@ -103,7 +143,17 @@ class Peak2Peak(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = np.max(X) - np.min(X)
+        def transform_sample(x):
+            xt = np.max(x) - np.min(x)
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
         return Xt
     
 class CrestFactor(BaseEstimator, TransformerMixin):
@@ -115,7 +165,17 @@ class CrestFactor(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = np.max(np.absolute(X)) / self.root_mean_square_feature.transform(X)
+        def transform_sample(x):
+            xt = np.max(np.absolute(x)) / self.root_mean_square_feature.transform(x)
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
         return Xt
     
 class ImpulseValue(BaseEstimator, TransformerMixin):
@@ -126,7 +186,17 @@ class ImpulseValue(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt =np.max(np.absolute(X)) / np.mean(np.absolute(X))
+        def transform_sample(x):
+            xt = np.max(np.absolute(x)) / np.mean(np.absolute(x))
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
         return Xt
     
 class MarginFactor(BaseEstimator, TransformerMixin):
@@ -138,7 +208,17 @@ class MarginFactor(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = np.max(np.absolute(X)) / self.square_root_of_amplitude.transform(X)
+        def transform_sample(x):
+            xt = np.max(np.absolute(x)) / self.square_root_of_amplitude.transform(x)
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
         return Xt
     
 class ShapeFactor(BaseEstimator, TransformerMixin):
@@ -150,7 +230,17 @@ class ShapeFactor(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = self.root_mean_square_feature.transform(X) / np.mean(np.absolute(X))
+        def transform_sample(x):
+            xt = self.root_mean_square_feature.transform(x) / np.mean(np.absolute(x))
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
         return Xt
 
 class KurtosisFactor(BaseEstimator, TransformerMixin):
@@ -163,7 +253,17 @@ class KurtosisFactor(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = self.kurtosis.transform(X) / (self.root_mean_square_feature.transform(X) ** 4)
+        def transform_sample(x):
+            xt = self.kurtosis.transform(x) / (self.root_mean_square_feature.transform(x) ** 4)
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
         return Xt
     
 class FrequencyCenter(BaseEstimator, TransformerMixin):
@@ -174,8 +274,19 @@ class FrequencyCenter(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = 2 * np.abs(rfft(X)) / X.size
-        return np.mean(Xt)
+        def transform_sample(x):
+            xt = 2 * np.abs(rfft(x)) / x.size
+            xt = np.mean(xt)
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
+        return Xt
     
 class RootMeanSquareFrequency(BaseEstimator, TransformerMixin):
     def __init__(self) -> None:
@@ -185,8 +296,20 @@ class RootMeanSquareFrequency(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X, y=None, **fit_params):
-        Xt = 2 * np.abs(rfft(X)) / X.size
-        return np.sqrt(np.mean(Xt**2))
+        def transform_sample(x):
+            xt = 2 * np.abs(rfft(x)) / x.size
+            xt = np.sqrt(np.mean(xt**2))
+            return xt
+        
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+        
+        return Xt
+    
     
 class RootFrequencyVariance(BaseEstimator, TransformerMixin):
     def __init__(self) -> None:
@@ -196,40 +319,24 @@ class RootFrequencyVariance(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None):
         return self
     
-    def transform(self, X, y=None, **fit_params):
-        Xt = 2 * np.abs(rfft(X)) / X.size
-        return np.sqrt(np.mean((Xt - self.frequency_center.transform(Xt)) ** 2))
-
-class FeatureExtractionMixer(BaseEstimator, TransformerMixin):
-    def __init__(self) -> None:
-        super().__init__()
-        self.strategies = []
-    
-    def fit(self, X, y=None):
-        return self
-
-    def append_strategy(self, feature_extraction_strategy):
-        self.strategies.append(feature_extraction_strategy)
-    
-    def transform(self, X, y=None, **fit_params):
-        samples = []
-        for x in X:
-            features = []
-            for strategy in self.strategies: 
-                features.append(float(strategy.transform(x)))
-            features = np.array(features, dtype=float)
-            samples.append(features)
+    def transform(self, X, y=None, **fit_params):        
+        def transform_sample(x):
+            xt = 2 * np.abs(rfft(x)) / x.size
+            xt = np.sqrt(np.mean((xt - self.frequency_center.transform(xt)) ** 2))
+            return xt
             
-        result = np.array(samples)
-        return result
-    
+        Xt = []
+        
+        if len(X.shape) == 2:
+            Xt = np.array([[transform_sample(x)] for x in X])
+        else:      
+            Xt = transform_sample(X)
+            
+        return Xt
+
 #endregion
 
-FEATURES = [
-    ("M", MagnitudeMeanFeatureMfcc()), 
-    ("S", MagnitudeStdFeatureMfcc()), 
-    ("C", CorrelationFeatureMfcc())
-]
+#region methods
 
 def get_features(self):
     number_features = np.arange(1, len(FEATURES)+1)
@@ -237,4 +344,32 @@ def get_features(self):
     all_combinations = map(combinations, number_features)
     features = reduce(lambda x, y: ite.chain(x, y), all_combinations)
     return features
+
+#endregion
+
+#region pre-arranged set of features
+
+FEATURES = [
+    ("M", MagnitudeMeanFeatureMfcc()), 
+    ("S", MagnitudeStdFeatureMfcc()), 
+    ("C", CorrelationFeatureMfcc())
+]
+
+StatisticalSignalDescriptors = [
+    ("rootMeanSquareFeature", RootMeanSquareFeature()),
+    ("squareRootOfAmplitude", SquareRootOfAmplitude()),
+    ("kurtosis", Kurtosis()),
+    ("skewness", Skewness()),
+    ("peak2Peak", Peak2Peak()),
+    ("crestFactor", CrestFactor()),
+    ("impulseValue", ImpulseValue()),
+    ("marginFactor", MarginFactor()),
+    ("shapeFactor", ShapeFactor()),
+    ("kurtosisFactor", KurtosisFactor()),
+    ("frequencyCenter", FrequencyCenter()),
+    ("rootMeanSquareFrequenc", RootMeanSquareFrequency()),
+    ("rootFrequencyVariance", RootFrequencyVariance())
+]
+
+#endregion
 

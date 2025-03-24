@@ -3,7 +3,7 @@ from sklearn.base import BaseEstimator, OutlierMixin
 from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.svm import OneClassSVM
 from mtsa.features.mel import Array2Mfcc
-from mtsa.features.stats import CrestFactor, FeatureExtractionMixer, FrequencyCenter, ImpulseValue, Kurtosis, KurtosisFactor, MarginFactor, Peak2Peak, RootFrequencyVariance, RootMeanSquareFeature, RootMeanSquareFrequency, ShapeFactor, Skewness, SquareRootOfAmplitude
+from mtsa.features.stats import StatisticalSignalDescriptors
 from mtsa.utils import Wav2Array
 from mtsa.features.stats import FEATURES
 import time
@@ -12,12 +12,16 @@ class OSVM(BaseEstimator, OutlierMixin):
     def __init__(self, 
                  use_array2mfcc = False, 
                  sampling_rate=None,
-                 use_featureUnion= False):
+                 use_featureUnion= True,
+                 isForWaveData = True,
+                 mono = True):
         super().__init__()
         self.sampling_rate = sampling_rate
         self.final_model = OneClassSVM(kernel="rbf", nu =0.1)
         self.use_array2mfcc = use_array2mfcc
         self.use_featureUnion = use_featureUnion
+        self.isForWaveData = isForWaveData
+        self.mono = mono
         self.model = self._build_model()
         self.last_fit_time = 0
         
@@ -47,60 +51,22 @@ class OSVM(BaseEstimator, OutlierMixin):
 
     def predict(self, X):
         return self.model.predict(X)
-
+    
     def _build_model(self):
-        wav2array = Wav2Array(sampling_rate=self.sampling_rate)
         array2mfcc = Array2Mfcc(sampling_rate=self.sampling_rate)
-        features = FeatureUnion(FEATURES)
-        featureExtractionMixer = FeatureExtractionMixer()
+        wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=self.mono)
+        features = FeatureUnion(StatisticalSignalDescriptors)
+        model = Pipeline(steps=[])
         
-        featureExtractionMixer.append_strategy(RootMeanSquareFeature())
-        featureExtractionMixer.append_strategy(SquareRootOfAmplitude())
-        featureExtractionMixer.append_strategy(Kurtosis())
-        featureExtractionMixer.append_strategy(Skewness())
-        featureExtractionMixer.append_strategy(Peak2Peak())
-        featureExtractionMixer.append_strategy(CrestFactor())
-        featureExtractionMixer.append_strategy(ImpulseValue())
-        featureExtractionMixer.append_strategy(MarginFactor())
-        featureExtractionMixer.append_strategy(ShapeFactor())
-        featureExtractionMixer.append_strategy(KurtosisFactor())
-        featureExtractionMixer.append_strategy(FrequencyCenter())
-        featureExtractionMixer.append_strategy(RootMeanSquareFrequency())
-        featureExtractionMixer.append_strategy(RootFrequencyVariance())
+        if self.isForWaveData:
+            model.steps.append(("wav2array", wav2array))
+            
+        if self.use_array2mfcc:
+            model.steps.append(("array2mfcc", array2mfcc))
         
-        
-        if self.use_array2mfcc and self.use_featureUnion:
-            model = Pipeline(
-                steps=[
-                    ("wav2array", wav2array),
-                    ("array2mfcc", array2mfcc),
-                    ("features", features),
-                    ("final_model", self.final_model),
-                ]
-            )
-        elif self.use_array2mfcc:
-            model = Pipeline(
-                steps=[
-                    ("wav2array", wav2array),
-                    ("array2mfcc", array2mfcc),
-                    ("final_model", self.final_model),
-                ]
-            )
-        elif self.use_featureUnion:
-            model = Pipeline(
-                steps=[
-                    ("wav2array", wav2array),
-                    ("features", features),
-                    ("final_model", self.final_model),
-                ]
-            )
-        else:
-            model = Pipeline(
-                steps=[
-                    ("wav2array", wav2array),
-                    ("featureExtractionMixer", featureExtractionMixer),
-                    ("final_model", self.final_model),
-                ]
-            )
+        if self.use_featureUnion:
+            model.steps.append(("features", features))
+            
+        model.steps.append(("final_model", self.final_model))
 
         return model

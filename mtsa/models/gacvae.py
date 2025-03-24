@@ -108,38 +108,18 @@ class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
         array2mfcc = Array2Mfcc(sampling_rate=self.sampling_rate)
         wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=self.mono)
         features = FeatureUnion(FEATURES)
-        # mono = (self.mono and not self.use_array2mfcc)
+        model = Pipeline(steps=[])
         
-        if self.use_featureUnion and self.use_array2mfcc and self.isForWaveData:
-            model = Pipeline(
-                steps=[
-                    ("wav2array", wav2array),
-                    ("array2mfcc", array2mfcc),
-                    ("features", features),
-                    ("final_model", self.final_model),
-                ]
-            )
-        elif self.use_array2mfcc and self.isForWaveData:
-            model = Pipeline(
-                steps=[
-                    ("wav2array", wav2array),
-                    ("array2mfcc", array2mfcc),
-                    ("final_model", self.final_model),
-                ]
-            )
-        elif self.isForWaveData:
-            model = Pipeline(
-                steps=[
-                    ("wav2array", wav2array),
-                    ("final_model", self.final_model),
-                ]
-            )
-        else:
-            model = Pipeline(
-                steps=[
-                    ("final_model", self.final_model),
-                ]
-            )
+        if self.isForWaveData:
+            model.steps.append(("wav2array", wav2array))
+            
+        if self.use_array2mfcc:
+            model.steps.append(("array2mfcc", array2mfcc))
+        
+        if self.use_featureUnion:
+            model.steps.append(("features", features))
+            
+        model.steps.append(("final_model", self.final_model))
 
         return model
     

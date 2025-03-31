@@ -42,7 +42,7 @@ class GACVAE(nn.Module, BaseEstimator, OutlierMixin):
 
     @property
     def name(self):
-        return "GACVAE " + "+".join([f[0] for f in self.features])
+        return "GACVAE" 
 
     def fit(
         self,

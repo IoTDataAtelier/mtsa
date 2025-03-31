@@ -63,7 +63,7 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
 
     @property
     def name(self):
-        return "RANSynCoder " + "+".join([f[0] for f in self.features])
+        return "RANSynCoders"
         
     def fit(self, 
             X,

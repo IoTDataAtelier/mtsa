@@ -72,7 +72,7 @@ class IForest(BaseEstimator, OutlierMixin):
 
     @property
     def name(self):
-        return "IsolationForest " + "+".join([f[0] for f in self.features])
+        return "IsolationForest" 
         
     def fit(self, X, y=None):        
         start = time.perf_counter()    

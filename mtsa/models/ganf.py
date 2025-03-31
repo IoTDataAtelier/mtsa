@@ -57,7 +57,7 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
 
     @property
     def name(self):
-        return "GANF " + "+".join([f[0] for f in self.features])
+        return "GANF"
 
     def fit(
         self,

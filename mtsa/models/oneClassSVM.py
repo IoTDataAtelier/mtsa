@@ -27,7 +27,7 @@ class OSVM(BaseEstimator, OutlierMixin):
         
     @property
     def name(self):
-        return "OSVM " + "+".join([f[0] for f in self.features])
+        return "OSVM"
         
     def fit(self, X, y=None):    
         start = time.perf_counter()     

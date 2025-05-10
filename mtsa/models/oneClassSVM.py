@@ -12,14 +12,22 @@ class OSVM(BaseEstimator, OutlierMixin):
     def __init__(self, 
                  use_array2mfcc = False, 
                  sampling_rate=None,
-                 use_featureUnion= True,
+                 use_stats_features= True,
                  isForWaveData = True,
+                 use_MFCC_features=False,
+                 kernel = "rbf",
+                 nu = 0.1,
+                 degree = 3,
                  mono = True):
         super().__init__()
         self.sampling_rate = sampling_rate
-        self.final_model = OneClassSVM(kernel="rbf", nu =0.1)
+        self.kernel = kernel
+        self.nu = nu
+        self.degree = degree
+        self.final_model = OneClassSVM(kernel=self.kernel, nu=self.nu, degree=self.degree)
         self.use_array2mfcc = use_array2mfcc
-        self.use_featureUnion = use_featureUnion
+        self.use_stats_features = use_stats_features
+        self.use_MFCC_features = use_MFCC_features
         self.isForWaveData = isForWaveData
         self.mono = mono
         self.model = self._build_model()
@@ -55,7 +63,8 @@ class OSVM(BaseEstimator, OutlierMixin):
     def _build_model(self):
         array2mfcc = Array2Mfcc(sampling_rate=self.sampling_rate)
         wav2array = Wav2Array(sampling_rate=self.sampling_rate, mono=self.mono)
-        features = FeatureUnion(StatisticalSignalDescriptors)
+        stats_features = FeatureUnion(StatisticalSignalDescriptors)
+        MFCC_features = FeatureUnion(FEATURES)
         model = Pipeline(steps=[])
         
         if self.isForWaveData:
@@ -64,8 +73,11 @@ class OSVM(BaseEstimator, OutlierMixin):
         if self.use_array2mfcc:
             model.steps.append(("array2mfcc", array2mfcc))
         
-        if self.use_featureUnion:
-            model.steps.append(("features", features))
+        if self.use_stats_features:
+            model.steps.append(("statsFeatures", stats_features))
+            
+        if self.use_MFCC_features:
+            model.steps.append(("MFCCfeatures", MFCC_features))
             
         model.steps.append(("final_model", self.final_model))
 

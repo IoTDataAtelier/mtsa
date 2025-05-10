@@ -3,12 +3,15 @@ from keras.models import Model
 from keras.layers import Input, Dense
 from sklearn.base import BaseEstimator, OutlierMixin
 import numpy as np
+from mtsa.features.stats import FEATURES
 from mtsa.utils import Demux2Array, Wav2Array
-from mtsa.features.mel import Array2MelSpec
-from sklearn.pipeline import Pipeline
+from mtsa.features.mel import Array2MelSpec, Array2Mfcc
+from sklearn.pipeline import FeatureUnion, Pipeline
 from functools import reduce
 from keras.optimizers import Adam
 import time
+from mtsa.utils import Wav2Array
+
 
 class AutoEncoderMixin(Model):
     def score_samples(self, X):
@@ -41,7 +44,8 @@ class Hitachi(BaseEstimator, OutlierMixin):
                  learning_rate=1e-3, 
                  shuffle=True,
                  validation_split=0.1,
-                 verbose=0
+                 verbose=0,
+                 use_MFCC=False
                  ) -> None:
         self.sampling_rate = sampling_rate
         self.random_state = random_state
@@ -58,6 +62,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
         self.validation_split=validation_split
         self.verbose=verbose
         self.last_fit_time = 0
+        self.use_MFCC = use_MFCC
         self.model = self._build_model()
     
 
@@ -127,8 +132,12 @@ class Hitachi(BaseEstimator, OutlierMixin):
   
     
     def get_model(self):
-        inputDim = self.n_mels * self.frames
-        inputLayer = Input(shape=(inputDim,))
+        
+        if self.use_MFCC:
+            inputDim, inputLayer = self.get_inputLayer4MFCC()
+        else:
+            inputDim, inputLayer = self.get_inputLayer()
+            
         h = Dense(64, activation="relu")(inputLayer)
         h = Dense(64, activation="relu")(h)
         h = Dense(8, activation="relu")(h)
@@ -139,12 +148,25 @@ class Hitachi(BaseEstimator, OutlierMixin):
         optimizer = Adam(learning_rate=self.learning_rate)
         final_model.compile(optimizer=optimizer, loss='mean_squared_error', jit_compile=True)
         return final_model
+
+    def get_inputLayer(self):
+        inputDim = self.n_mels * self.frames
+        inputLayer = Input(shape=(inputDim,))
+        return inputDim,inputLayer
+    
+    def get_inputLayer4MFCC(self):
+        inputDim = 230
+        inputLayer = Input(shape=(inputDim,))
+        return inputDim,inputLayer
     
     def _build_model(self):
         wav2array = Wav2Array(
             sampling_rate=self.sampling_rate,
             mono=self.mono,
             )
+        
+        array2mfcc = Array2Mfcc(sampling_rate=self.sampling_rate)
+        features = FeatureUnion(FEATURES)
         
         demux2array = Demux2Array()
         array2melspec= Array2MelSpec(
@@ -166,6 +188,16 @@ class Hitachi(BaseEstimator, OutlierMixin):
                 ("final_model", final_model),
                 ]
             )
+        
+        if self.use_MFCC:
+            model = Pipeline(
+                steps=[
+                    ("wav2array", wav2array),
+                    ("array2mfcc", array2mfcc),
+                    ("features", features),
+                    ("final_model", final_model),
+                    ]
+                )
         
         return model
 

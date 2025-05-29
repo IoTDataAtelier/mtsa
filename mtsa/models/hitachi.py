@@ -70,22 +70,24 @@ class Hitachi(BaseEstimator, OutlierMixin):
     def name(self):
         return "Hitachi"
 
-    def fit(self, X, y=None):
-        start = time.perf_counter()    
-        
-        self.model.fit(X, 
-                              y,
-                              final_model__batch_size=self.batch_size,
-                              final_model__shuffle= self.shuffle,
-                              final_model__validation_split=self.validation_split,
-                              final_model__epochs = self.epochs,
-                              final_model__verbose = self.verbose
-                              )
+    def fit(self, X, y=None, validation_data=None):
+        start = time.perf_counter()
+
+        self.model.fit(
+            X,
+            y,
+            final_model__batch_size=self.batch_size,
+            final_model__shuffle=self.shuffle,
+            final_model__validation_split=0.0 if validation_data else self.validation_split,
+            final_model__validation_data=validation_data,
+            final_model__epochs=self.epochs,
+            final_model__verbose=self.verbose
+        )
+
         end = time.perf_counter()
         self.last_fit_time = end - start
-        return self.last_fit_time #seconds
-        
-        
+        return self.last_fit_time
+
 
     def transform(self, X, y=None):
 

@@ -15,13 +15,13 @@ from mtsa.utils import Wav2Array
 
 class AutoEncoderMixin(Model):
     def score_samples(self, X):
-        return -1 * np.mean(np.square(X - self.predict(X))) 
-    
+        return -1 * np.mean(np.square(X - self.predict(X)))
+
     def fit(self, x=None, y=None, batch_size=None, epochs=50, verbose=0, callbacks=None, validation_split=0, validation_data=None, shuffle=True, class_weight=None, sample_weight=None, initial_epoch=0, steps_per_epoch=None, validation_steps=None, validation_batch_size=None, validation_freq=1, max_queue_size=10, workers=1, use_multiprocessing=True):
         #TODO final_model__epochs
         return super().fit(x=x, y=x, batch_size=batch_size, epochs=epochs, verbose=verbose, callbacks=callbacks, validation_split=validation_split, validation_data=validation_data, shuffle=shuffle, class_weight=class_weight, sample_weight=sample_weight, initial_epoch=initial_epoch, steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_batch_size=validation_batch_size, validation_freq=validation_freq)
-    
-       
+
+
 class Hitachi(BaseEstimator, OutlierMixin):
     """
     
@@ -30,7 +30,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
     
     """
 
-    def __init__(self, 
+    def __init__(self,
                  sampling_rate=None,
                  random_state = None,
                  n_mels=64,
@@ -41,7 +41,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
                  mono=False,
                  epochs=50,
                  batch_size=512,
-                 learning_rate=1e-3, 
+                 learning_rate=1e-3,
                  shuffle=True,
                  validation_split=0.1,
                  verbose=0,
@@ -64,7 +64,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
         self.last_fit_time = 0
         self.use_MFCC = use_MFCC
         self.model = self._build_model()
-    
+
 
     @property
     def name(self):
@@ -88,7 +88,6 @@ class Hitachi(BaseEstimator, OutlierMixin):
         self.last_fit_time = end - start
         return self.last_fit_time #seconds
 
-
     def transform(self, X, y=None):
 
         def transform_one(Xi):
@@ -103,7 +102,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
         Xp = np.array(
             list(
                 map(
-                    self.predict, 
+                    self.predict,
                     [[x] for x in X])
                 )
             )
@@ -112,7 +111,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
         Xt = np.array(
             list(
                 map(
-                    transform_one, 
+                    transform_one,
                     [[x] for x in X])
                 )
             )
@@ -127,19 +126,19 @@ class Hitachi(BaseEstimator, OutlierMixin):
         return np.array(
             list(
                 map(
-                    self.model.score_samples, 
+                    self.model.score_samples,
                     [[x] for x in X])
                 )
             )
-  
-    
+
+
     def get_model(self):
-        
+
         if self.use_MFCC:
             inputDim, inputLayer = self.get_inputLayer4MFCC()
         else:
             inputDim, inputLayer = self.get_inputLayer()
-            
+
         h = Dense(64, activation="relu")(inputLayer)
         h = Dense(64, activation="relu")(h)
         h = Dense(8, activation="relu")(h)
@@ -155,21 +154,21 @@ class Hitachi(BaseEstimator, OutlierMixin):
         inputDim = self.n_mels * self.frames
         inputLayer = Input(shape=(inputDim,))
         return inputDim,inputLayer
-    
+
     def get_inputLayer4MFCC(self):
         inputDim = 230
         inputLayer = Input(shape=(inputDim,))
         return inputDim,inputLayer
-    
+
     def _build_model(self):
         wav2array = Wav2Array(
             sampling_rate=self.sampling_rate,
             mono=self.mono,
             )
-        
+
         array2mfcc = Array2Mfcc(sampling_rate=self.sampling_rate)
         features = FeatureUnion(FEATURES)
-        
+
         demux2array = Demux2Array()
         array2melspec= Array2MelSpec(
             sampling_rate=self.sampling_rate,
@@ -179,9 +178,9 @@ class Hitachi(BaseEstimator, OutlierMixin):
             frames=self.frames,
             power=self.power,
             )
-        
+
         final_model = self.get_model()
-        
+
         model = Pipeline(
             steps=[
                 ("wav2array", wav2array),
@@ -190,7 +189,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
                 ("final_model", final_model),
                 ]
             )
-        
+
         if self.use_MFCC:
             model = Pipeline(
                 steps=[
@@ -200,12 +199,12 @@ class Hitachi(BaseEstimator, OutlierMixin):
                     ("final_model", final_model),
                     ]
                 )
-        
+
         return model
 
 
 class HitachiDCASE2020(Hitachi):
-    
+
 
     def get_model(self):
         inputDim = self.n_mels * self.frames
@@ -221,10 +220,10 @@ class HitachiDCASE2020(Hitachi):
         h = Dense(128, activation="relu")(h)
         h = Dense(inputDim, activation="relu")(h)
         final_model = AutoEncoderMixin(inputs=inputLayer, outputs=h)
-        optimizer = Adam(learning_rate=self.learning_rate)  
+        optimizer = Adam(learning_rate=self.learning_rate)
         final_model.compile(optimizer=optimizer, loss='mean_squared_error')
         return final_model
-    
+
 
 def get_models_hitachi():
     hitachi = [("Baseline", Hitachi())]

@@ -86,7 +86,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
 
         end = time.perf_counter()
         self.last_fit_time = end - start
-        return self.last_fit_time # seconds
+        return self.last_fit_time #seconds
 
 
     def transform(self, X, y=None):

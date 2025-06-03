@@ -70,7 +70,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
     def name(self):
         return "Hitachi"
 
-    def fit(self, X, y=None, validation_data=None):
+    def fit(self, X, y=None, validation_data=None, callbacks=None):
         start = time.perf_counter()
 
         self.model.fit(
@@ -80,6 +80,7 @@ class Hitachi(BaseEstimator, OutlierMixin):
             final_model__shuffle=self.shuffle,
             final_model__validation_split=0.0 if validation_data else self.validation_split,
             final_model__validation_data=validation_data,
+            final_model__callbacks=callbacks,
             final_model__epochs=self.epochs,
             final_model__verbose=self.verbose
         )

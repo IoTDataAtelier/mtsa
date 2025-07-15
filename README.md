@@ -1,31 +1,12 @@
-# MTSA (Multiple Time Series Analysis)
+<p align="center">
+<img width="805" height="310" alt="image" src="https://github.com/user-attachments/assets/6f0ff77f-c83e-45eb-bdf6-b6f2fcbd31ed" />
+</p>
 
-MTSA is a unified framework for anomaly detection in multiple time series, designed to facilitate the replication and development of state-of-the-art anomaly detection approaches. The framework is particularly focused on handling acoustic data from industrial machinery, such as valves, pumps, fans, and slide rails.
+MTSA is a research toolkit designed to aggregate machine learning models for anomaly detection, with a strong focus on enhancing reproducibility and explainability in model implementation. It offers a structured environment for developing, testing, and comparing various anomaly detection approaches, prioritizing replicability and ease of use. The toolkit is continuously updated to include both classical and state-of-the-art algorithms for anomaly detection in multivariate time series.
 
-## Table of Contents
+## 🔧 Installation
 
-- [Introduction](#introduction)
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Implemented Approaches](#implemented-approaches)
-
-## Introduction
-
-Anomaly detection is a crucial technique for identifying unusual patterns in data, which can indicate malfunctions or other significant events. In industrial settings, detecting anomalies in machinery data can enable predictive maintenance and reduce downtime.
-
-MTSA (Multiple Time Series Analysis) is a framework designed to simplify the implementation and replication of anomaly detection approaches, particularly for acoustic data. The framework provides a structured environment for developing, testing, and comparing different anomaly detection models, with a focus on replicability and ease of use.
-
-## Features
-
-- **Unified Framework:** MTSA provides a modular and extensible structure for developing and testing anomaly detection models on multiple time series.
-- **State-of-the-Art Implementations:** The framework includes implementations of three state-of-the-art anomaly detection approaches: Hitachi, RANSynCoders, and GANF.
-- **Enhanced Pipelines:** RANSynCoders and GANF pipelines have been enhanced with feature extraction based on Mel-Frequency Cepstral Coefficients (MFCC), improving their performance on acoustic data.
-- **Comparative Analysis:** MTSA enables easy comparison of different approaches, with a focus on acoustic data from industrial machinery.
-
-## Installation
-
-To install MTSA, clone the repository and install the necessary dependencies:
+To get started, clone the repository and install the required dependencies:
 
 ```bash
 git clone https://github.com/your-username/MTSA.git
@@ -33,21 +14,42 @@ cd MTSA
 pip install -r requirements.txt
 ```
 
-## Usage
+## 🚀 Usage
 
-MTSA can be used to run anomaly detection models on acoustic data from industrial machines. Find an example [here](examples/MTSA.ipynb).
+MTSA allows you to run anomaly detection models on acoustic data collected from complex systems like industrial machines.
 
-if you have problems with google colab please try running it:
+A complete example is available in the following Jupyter notebook:  
+👉 [examples/MTSA.ipynb](examples/MTSA.ipynb)
 
+> **Note:** If you encounter issues while running on Google Colab, try upgrading the Colab package:
+
+```bash
+pip install --upgrade google-colab
 ```
-    %pip install --upgrade google-colab
-```
 
-## Implemented Approaches
+## 🧠 Implemented Machine Learning Approaches
 
-MTSA includes the following anomaly detection approaches:
+MTSA currently integrates the following anomaly detection models:
 
-- **Hitachi**: A robust approach tailored for industrial anomaly detection.
-- **RANSynCoders**: A state-of-the-art model enhanced with MFCC for better performance on acoustic data.
-- **GANF**: A generative adversarial network approach, also enhanced with MFCC.
-- **Isolation Forest**: An approach using ITrees to isolate anomalies, also enhanced with MFCC.
+- **Hitachi**  
+  A robust autoencoder model specifically designed for industrial anomaly detection tasks.
+
+- **RANSynCoders**  
+  Ensemble of autoencoders with FFT, leveraging bootstrapping to perform robust anomaly inference.
+  
+- **GANF**  
+  A model that combines graph structures, recurrent neural networks (RNNs), and normalizing flows to perform anomaly inference.
+
+- **Isolation Forest**  
+  A tree-based ensemble method that isolates anomalies.
+
+- **OSVM (One-Class SVM)**  
+  A support vector-based approach for detecting outliers by modeling the distribution of normal data.
+
+And more!
+
+
+## 🌐 Learn More
+
+For full documentation, examples, and additional resources, visit our [official website](https://iotdataatelier.github.io/mtsa-docs/).
+

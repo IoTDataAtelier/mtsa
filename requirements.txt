@@ -11,3 +11,4 @@ torch
 spectrum
 tqdm
 tensorflow
+setuptools-scm

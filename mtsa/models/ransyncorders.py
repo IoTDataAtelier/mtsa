@@ -91,7 +91,7 @@ class RANSynCoders(BaseEstimator, OutlierMixin):
                             )
         end = time.perf_counter()
         self.last_fit_time = end - start
-        return self.last_fit_time #seconds
+        return self
     
     def predict(self, X):
         return self.model.predict(X)

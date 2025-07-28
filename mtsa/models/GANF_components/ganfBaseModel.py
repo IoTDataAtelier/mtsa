@@ -108,6 +108,8 @@ class GANFBaseModel(NetworkLearnerModel, nn.Module):
         adjacent_matrix = self.adjacent_matrix
 
         self.__fitCore(loss_best, h_A_old, h_tol, dimension, dataloaders, adjacent_matrix, rho)
+        
+        self.is_fitted_ = True
 
     def predict(self, X):
         return self.__forward(X, self.adjacent_matrix)

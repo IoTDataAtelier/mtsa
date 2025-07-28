@@ -88,9 +88,8 @@ class GANF(nn.Module, BaseEstimator, OutlierMixin):
             final_model__mono=mono,
         )
         end = time.perf_counter()
-        
         self.last_fit_time = end - start
-        return self.last_fit_time #seconds
+        return self
 
     def transform(self, X, y=None):
         l = list()
